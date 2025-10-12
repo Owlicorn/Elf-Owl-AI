@@ -5,3 +5,5 @@ data
 .vscode
 .env
 __pycache__
+output.json
+prompt.json

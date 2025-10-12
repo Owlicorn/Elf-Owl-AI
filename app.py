@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session
 import os
+import json
 from datetime import datetime
 from inference import ElfOwlInference
 import config
@@ -17,6 +18,35 @@ except Exception as e:
     print(f"❌ Failed to initialize Elf Owl AI: {e}")
     elf_owl = None
     ai_ready = False
+
+def save_user_prompt(user_message):
+    """Save ONLY user prompts to prompt.json - simple and clean"""
+    try:
+        prompt_data = {
+            "user_message": user_message,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Create file if it doesn't exist
+        if not os.path.exists('prompt.json'):
+            with open('prompt.json', 'w') as f:
+                json.dump([], f)
+        
+        # Read existing data
+        with open('prompt.json', 'r') as f:
+            existing_data = json.load(f)
+        
+        # Append new prompt
+        existing_data.append(prompt_data)
+        
+        # Write back to file
+        with open('prompt.json', 'w') as f:
+            json.dump(existing_data, f, indent=2)
+            
+        print(f"✅ Saved user prompt: '{user_message}'")
+        
+    except Exception as e:
+        print(f"❌ Error saving prompt: {e}")
 
 @app.route('/')
 def index():
@@ -80,7 +110,6 @@ def api_set_mood():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Update the main chat endpoint to use mood selection
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     """Chat API endpoint with mood support"""
@@ -90,7 +119,7 @@ def api_chat():
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
-        forced_mood = data.get('mood', '').strip().lower()  # NEW: Get mood from request
+        forced_mood = data.get('mood', '').strip().lower()
         
         if not message:
             return jsonify({'error': 'Empty message'}), 400
@@ -101,7 +130,10 @@ def api_chat():
         
         conversation_history = session.get('conversation', [])
         
-        # Generate response with optional mood forcing
+        # Save ONLY the user message to prompt.json
+        save_user_prompt(message)
+        
+        # Generate response
         response_data = elf_owl.generate_response(
             message, 
             conversation_history,
@@ -116,7 +148,7 @@ def api_chat():
             'timestamp': datetime.now().isoformat()
         })
         
-        # Keep only last 10 messages
+        # Keep only last 10 messages in session
         if len(conversation_history) > 10:
             conversation_history = conversation_history[-10:]
         
@@ -150,6 +182,9 @@ def api_generate():
         
         if not prompt:
             return jsonify({'error': 'Empty prompt'}), 400
+        
+        # Save the prompt
+        save_user_prompt(prompt)
         
         response_data = elf_owl.generate_response(
             prompt, 
@@ -277,6 +312,7 @@ if __name__ == '__main__':
     print(f"🌐 API Documentation: http://{config.Config.API_HOST}:{config.Config.API_PORT}/api/docs")
     print(f"💬 Chat Interface: http://{config.Config.API_HOST}:{config.Config.API_PORT}/chat")
     print("🎯 Free Generation Mode: ENABLED")
+    print("📝 User prompts saving: ENABLED (prompt.json)")
     
     app.run(
         host=config.Config.API_HOST,
