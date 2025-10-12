@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Elf Owl AI</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+        .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
+        .ready { background: #d4edda; color: #155724; }
+        .not-ready { background: #f8d7da; color: #721c24; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦉 Elf Owl AI</h1>
+        <p>Auto-scaling AI with Free Generation & Mood System</p>
+        
+        <div class="status {% if ai_ready %}ready{% else %}not-ready{% endif %}">
+            Status: {% if ai_ready %}✅ Ready{% else %}❌ Not Ready{% endif %}
+        </div>
+        
+        <div>
+            <a href="/chat" class="btn">💬 Open Chat</a>
+            <a href="/api/docs" class="btn">📚 API Docs</a>
+            <a href="/api/info" class="btn">ℹ️ System Info</a>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Features:</h3>
+            <ul>
+                <li>🎯 Auto-scaling model architecture</li>
+                <li>🚀 Free generation (1-512+ tokens)</li>
+                <li>😊 Mood-based responses</li>
+                <li>📚 Dual data sources</li>
+                <li>💭 Thinking process</li>
+                <li>🔗 REST API</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
