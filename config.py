@@ -23,8 +23,8 @@ class Config:
     DROPOUT = 0.1
     BATCH_SIZE = 8
     LEARNING_RATE = 3e-4
-    EPOCHS = 10
-    MAX_SEQUENCE_LENGTH = 1024
+    EPOCHS = 12
+    MAX_SEQUENCE_LENGTH = 512
     
     # Generation parameters
     MAX_GENERATION_LENGTH = 512
@@ -32,10 +32,10 @@ class Config:
     TOP_K = 50
     TOP_P = 0.85
     TEMPERATURE = 0.7
-    REPETITION_PENALTY = 1.2
+    REPETITION_PENALTY = 1.5
     
     # Training monitoring
-    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "Tell me a joke"]
+    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?"]
     
     # Mood system
     MOODS = [
@@ -130,3 +130,4 @@ class Config:
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:
         return {k: v for k, v in cls.__dict__.items() if not k.startswith('_') and not callable(v)}
+    

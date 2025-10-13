@@ -41,7 +41,7 @@ def call_gemini_with_context(user_message, context_messages, mood):
     else:
         full_prompt = user_message
 
-    prompt = f"""Generate a response in {mood} mood for this conversation:
+    prompt = f"""You are Elf Owl AI. You are virtual owl AI. Generate a response in {mood} mood for this conversation:
 
 {full_prompt}
 
@@ -135,15 +135,24 @@ def main():
             # Get the response we already generated
             response_data = gemini_responses[i][mood]
             
-            # Build context_used with SAME MOOD responses
+            # Build context_used with EXACTLY 2 previous entries when available
             context_used = []
-            if i >= 1:
-                # For prompt at index 1, use prompt 0 responses in SAME MOOD
-                prev_response = gemini_responses[i-1][mood]
+            if i >= 2:
+                # For prompt at index 2 or higher, use exactly 2 previous prompts in SAME MOOD
+                for j in range(i-2, i):  # This gets i-2 and i-1
+                    prev_response = gemini_responses[j][mood]
+                    context_used.append({
+                        "user": prompts[j]['user_message'],
+                        "assistant": prev_response["response"]
+                    })
+            elif i == 1:
+                # For prompt at index 1, use only 1 previous (index 0)
+                prev_response = gemini_responses[0][mood]
                 context_used.append({
-                    "user": prompts[i-1]['user_message'],
+                    "user": prompts[0]['user_message'],
                     "assistant": prev_response["response"]
                 })
+            # For i == 0, context_used remains empty (no previous entries)
             
             # Create training example with proper mood-matched context
             training_example = {
