@@ -1,0 +1,9 @@
+torch
+numpy
+tqdm
+pymongo
+tokenizers
+flask
+python-dotenv
+google-generativeai
+dotenv

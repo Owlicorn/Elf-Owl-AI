@@ -5,6 +5,8 @@ from datetime import datetime
 from inference import ElfOwlInference
 import config
 
+# !pip install torch numpy tqdm pymongo tokenizers flask python-dotenv google-generativeai dotenv
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'elf-owl-secret-key-2024')
 app.config['SESSION_TYPE'] = 'filesystem'
