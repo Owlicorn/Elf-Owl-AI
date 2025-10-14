@@ -26,12 +26,12 @@ class ElfOwlDataset(Dataset):
     def __getitem__(self, idx):
         pair = self.pairs[idx]
         
-        # Format: [CLS] Input: {input} [SEP] Thinking: {thinking} [SEP] Output: {output} [EOS]
+        # FORMAT: Input -> Thinking -> Mood -> Output
         text_parts = [
             f"Input: {pair['input']}",
             f"Thinking: {pair.get('thinking', 'Analyzing the query...')}",
-            f"Output: {pair['output']}",
-            f"Mood: {pair['mood']}"
+            f"Mood: {pair['mood']}",
+            f"Output: {pair['output']}"
         ]
         
         text = " [SEP] ".join(text_parts) + " [EOS]"
@@ -87,8 +87,8 @@ class StreamingDataset(Iterator):
                 text_parts = [
                     f"Input: {pair['input']}",
                     f"Thinking: {pair.get('thinking', 'Analyzing the query...')}",
-                    f"Output: {pair['output']}",
-                    f"Mood: {pair['mood']}"
+                    f"Mood: {pair['mood']}",
+                    f"Output: {pair['output']}"
                 ]
                 
                 text = " [SEP] ".join(text_parts) + " [EOS]"
@@ -119,7 +119,7 @@ class StreamingDataset(Iterator):
 
 class ElfOwlTrainer:
     def __init__(self, persistent_mongo: bool = True, use_streaming: bool = False):
-        self.config = config.Config()  # Use instance, not class
+        self.config = config.Config()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.use_streaming = use_streaming
         print(f"🚀 Using device: {self.device}")
@@ -141,15 +141,15 @@ class ElfOwlTrainer:
         }
     
     def prepare_training(self):
-        """Prepare everything for training - FIXED version"""
+        """Prepare everything for training"""
         print("🔄 Preparing training...")
         
-        # **Step 1: Load data first for analysis**
+        # Load data for analysis
         print("📚 Loading training data for analysis...")
         training_pairs = self.data_loader.get_training_pairs(max_examples=5000)
         data_size = len(training_pairs)
         
-        # **Step 2: Calculate unique tokens (word-level approximation)**
+        # Calculate unique tokens
         unique_words = set()
         for pair in training_pairs:
             unique_words.update(pair['input'].split())
@@ -160,17 +160,17 @@ class ElfOwlTrainer:
         unique_token_count = len(unique_words)
         print(f"📊 Data analysis: {data_size} examples, {unique_token_count} unique words")
         
-        # **Step 3: Auto-scale FIRST using the class method**
+        # Auto-scale
         self.config.auto_scale(data_size, unique_token_count)
         
-        # **Step 4: NOW train tokenizer (VOCAB_SIZE will be set)**
+        # Train tokenizer
         print("🔄 Training tokenizer...")
         self.tokenizer.train_tokenizer(self.data_loader)
         
-        # **Step 5: Set tokenizer for data_loader**
+        # Set tokenizer for data_loader
         self.data_loader.set_tokenizer(self.tokenizer)
         
-        # **Step 6: Create dataset with the same training_pairs**
+        # Create dataset
         print("📚 Creating dataset...")
         dataset = ElfOwlDataset(training_pairs, self.tokenizer, self.config.MAX_SEQUENCE_LENGTH)
         self.dataloader = DataLoader(
@@ -222,7 +222,6 @@ class ElfOwlTrainer:
                 self.config.MAX_SEQUENCE_LENGTH,
                 batch_size=self.config.BATCH_SIZE
             )
-            # For streaming, we return the iterator directly
             return streaming_dataset
         else:
             print("🎯 Using batch dataloader...")
@@ -246,6 +245,7 @@ class ElfOwlTrainer:
         print("-" * 50)
         
         for prompt in self.config.SAMPLE_PROMPTS:
+            # Test full sequence generation
             input_text = f"Input: {prompt} [SEP] Thinking:"
             input_ids = self.tokenizer.encode(input_text)
             input_tensor = torch.tensor([input_ids]).to(self.device)
@@ -253,7 +253,7 @@ class ElfOwlTrainer:
             with torch.no_grad():
                 generated = self.model.generate(
                     input_tensor,
-                    max_length=min(150, self.config.MAX_GENERATION_LENGTH),
+                    max_length=min(200, self.config.MAX_GENERATION_LENGTH),
                     temperature=0.8,
                     top_k=30,
                     eos_token_id=special_tokens["[EOS]"],
@@ -265,9 +265,25 @@ class ElfOwlTrainer:
                 eos_idx = response_tokens.index(special_tokens["[EOS]"])
                 response_tokens = response_tokens[:eos_idx]
             
-            response = self.tokenizer.decode(response_tokens)
+            full_response = self.tokenizer.decode(response_tokens)
+            
+            # Try to parse thinking and output
+            thinking = ""
+            output = full_response
+            
+            if " [SEP] Mood: " in full_response:
+                parts = full_response.split(" [SEP] Mood: ")
+                if len(parts) > 1:
+                    thinking = parts[0].replace("Thinking: ", "").strip()
+                    mood_output = parts[1]
+                    if " [SEP] Output: " in mood_output:
+                        output_parts = mood_output.split(" [SEP] Output: ")
+                        if len(output_parts) > 1:
+                            output = output_parts[1].strip()
+            
             print(f"Q: {prompt}")
-            print(f"A: {response}")
+            print(f"Thinking: {thinking}")
+            print(f"Response: {output}")
             print()
         
         self.model.train()
@@ -386,7 +402,8 @@ class ElfOwlTrainer:
             print(f"   Total Examples: {self.training_stats['total_examples']:,}")
             
             # Sample generations to monitor progress
-            self.sample_generation(epoch + 1, self.training_stats['total_batches'])
+            if (epoch + 1) % 2 == 0:  # Every 2 epochs
+                self.sample_generation(epoch + 1, self.training_stats['total_batches'])
             
             # Save checkpoint if loss improved
             if avg_loss < self.training_stats['best_loss']:
@@ -414,7 +431,7 @@ class ElfOwlTrainer:
         print(f"🔄 Total training batches: {self.training_stats['total_batches']:,}")
     
     def save_checkpoint(self, epoch, loss, best=True):
-        """Save training checkpoint - FIXED version"""
+        """Save training checkpoint"""
         os.makedirs("checkpoints", exist_ok=True)
 
         prefix = "best" if best else f"epoch_{epoch}"
@@ -425,7 +442,7 @@ class ElfOwlTrainer:
         if isinstance(serializable_stats.get('start_time'), datetime):
             serializable_stats['start_time'] = serializable_stats['start_time'].isoformat()
 
-        # Create config dictionary without class methods
+        # Create config dictionary
         config_dict = {
             'D_MODEL': self.config.D_MODEL,
             'N_LAYERS': self.config.N_LAYERS,
@@ -451,7 +468,7 @@ class ElfOwlTrainer:
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
             'loss': loss,
-            'config_dict': config_dict,  # Use the simple dict instead of classmethod
+            'config_dict': config_dict,
             'vocab_size': self.tokenizer.vocab_size,
             'training_stats': serializable_stats,
             'timestamp': datetime.now().isoformat()
@@ -461,13 +478,13 @@ class ElfOwlTrainer:
         print(f"💾 Checkpoint saved: {checkpoint_path}")
     
     def save_model(self):
-        """Save final model - FIXED version"""
+        """Save final model"""
         os.makedirs("models", exist_ok=True)
         serializable_stats = dict(self.training_stats)
         if isinstance(serializable_stats.get('start_time'), datetime):
             serializable_stats['start_time'] = serializable_stats['start_time'].isoformat()
 
-        # Create config dictionary without class methods
+        # Create config dictionary
         config_dict = {
             'D_MODEL': self.config.D_MODEL,
             'N_LAYERS': self.config.N_LAYERS,
@@ -481,7 +498,7 @@ class ElfOwlTrainer:
 
         model_data = {
             'model_state_dict': self.model.state_dict(),
-            'config_dict': config_dict,  # Use the simple dict instead of classmethod
+            'config_dict': config_dict,
             'vocab_size': self.tokenizer.vocab_size,
             'training_mode': 'streaming' if self.use_streaming else 'batch',
             'training_stats': serializable_stats,
@@ -522,7 +539,6 @@ def main():
     if args.learning_rate:
         conf.LEARNING_RATE = args.learning_rate
 
-    # Determine if streaming should be enabled automatically for large datasets
     use_streaming = args.streaming
 
     print("🦉 Elf Owl AI Trainer")
@@ -547,3 +563,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

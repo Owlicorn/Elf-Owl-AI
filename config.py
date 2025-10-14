@@ -23,7 +23,7 @@ class Config:
     DROPOUT = 0.1
     BATCH_SIZE = 8
     LEARNING_RATE = 3e-4
-    EPOCHS = 12
+    EPOCHS = 8
     MAX_SEQUENCE_LENGTH = 512
     
     # Generation parameters

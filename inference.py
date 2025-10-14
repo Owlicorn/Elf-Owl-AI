@@ -17,7 +17,7 @@ class ElfOwlInference:
         self.config = config.Config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.use_smart_context = use_smart_context
-        self._default_mood = None  # Add this line
+        self._default_mood = None
         
         # Initialize components
         self.data_loader = DataLoader(persistent_mongo=persistent_mongo)
@@ -51,7 +51,7 @@ class ElfOwlInference:
         print(f"🔗 Persistent MongoDB: {persistent_mongo}")
     
     def load_model(self, model_path: str = None) -> Optional[ElfOwlModel]:
-        """Load trained model - FIXED version"""
+        """Load trained model"""
         if model_path is None:
             model_path = f"{self.config.MODEL_SAVE_PATH}.pt"
         
@@ -184,8 +184,8 @@ class ElfOwlInference:
                          max_length: int = None, temperature: float = None, 
                          top_k: int = None, top_p: float = None,
                          use_cache: bool = True, 
-                         forced_mood: str = None) -> Dict[str, Any]:  # FIXED: forced_mood parameter defined
-        """Generate response with optional mood selection"""
+                         forced_mood: str = None) -> Dict[str, Any]:
+        """Generate response with SEPARATE thinking and output generation"""
         if not self.model:
             return {
                 "response": "Model not loaded. Please check if the model file exists.",
@@ -219,7 +219,7 @@ class ElfOwlInference:
                 cached_response['response_time'] = time.time() - start_time
                 return cached_response
         
-        # MOOD SELECTION: Use forced mood or auto-detect
+        # MOOD SELECTION
         if forced_mood and forced_mood in self.config.MOODS:
             mood = forced_mood
             mood_source = "user_selected"
@@ -232,32 +232,47 @@ class ElfOwlInference:
             mood = self._select_mood(prompt)
             mood_source = "auto_detected"
             print(f"🎭 Auto-detected mood: {mood}")
-    
-        # Build structured prompt
-        prompt_parts = []
-        
-        # Add context if available
+
+        # **STEP 1: GENERATE THINKING SEPARATELY**
+        thinking_prompt_parts = []
         if context:
-            prompt_parts.append(f"Context: {context}")
+            thinking_prompt_parts.append(f"Context: {context}")
+        thinking_prompt_parts.append(f"Input: {prompt}")
         
-        # Add current input
-        prompt_parts.append(f"Input: {prompt}")
+        thinking_prompt = " [SEP] ".join(thinking_prompt_parts) + " [SEP] Thinking:"
         
-        # Build the full prompt for thinking generation
-        thinking_prompt = " [SEP] ".join(prompt_parts) + " [SEP] Thinking:"
-        
-        # Generate thinking step
-        thinking = self._generate_text(thinking_prompt, max_length=150, temperature=0.7)
+        # Generate thinking - STOP at [SEP]
+        thinking = self._generate_text(
+            thinking_prompt, 
+            max_length=100, 
+            temperature=0.7,
+            stop_tokens=["[SEP]", "[EOS]"]
+        )
         thinking = self._clean_response(thinking)
+        print(f"🤔 Thinking: {thinking}")
+
+        # **STEP 2: GENERATE OUTPUT SEPARATELY**  
+        output_prompt_parts = thinking_prompt_parts.copy()
+        output_prompt_parts.extend([
+            f"Thinking: {thinking}",
+            f"Mood: {mood}",
+            "Output:"
+        ])
         
-        # Build final prompt with thinking
-        response_prompt = thinking_prompt + f" {thinking} [SEP] Mood: {mood} [SEP] Output:"
+        output_prompt = " [SEP] ".join(output_prompt_parts)
         
-        # Generate final response
-        response = self._generate_text(response_prompt, max_length=max_length, 
-                                     temperature=temperature, top_k=top_k, top_p=top_p)
+        # Generate output - STOP at [EOS]
+        response = self._generate_text(
+            output_prompt, 
+            max_length=max_length, 
+            temperature=temperature, 
+            top_k=top_k, 
+            top_p=top_p,
+            stop_tokens=["[EOS]"]
+        )
         response = self._clean_response(response)
-        
+        print(f"💭 Response: {response}")
+
         # Build result
         result = {
             "response": response,
@@ -280,42 +295,55 @@ class ElfOwlInference:
         return result
     
     def _generate_text(self, prompt: str, max_length: int = 100, 
-                      temperature: float = 0.7, top_k: int = None, top_p: float = None) -> str:
-        """Generate text from prompt with enhanced controls"""
+                      temperature: float = 0.7, top_k: int = None, top_p: float = None,
+                      stop_tokens: List[str] = None) -> str:
+        """Generate text with proper stop token handling - FIXED VERSION"""
         if top_k is None:
             top_k = self.config.TOP_K
         if top_p is None:
             top_p = self.config.TOP_P
+        if stop_tokens is None:
+            stop_tokens = ["[SEP]", "[EOS]"]
         
         input_ids = self.tokenizer.encode(prompt)
         
-        # Handle very long prompts by truncating from the beginning
+        # Handle very long prompts
         max_input_length = self.config.MAX_SEQUENCE_LENGTH - max_length - 10
         if len(input_ids) > max_input_length:
-            # Keep the most relevant part (assume end is more important)
             input_ids = input_ids[-max_input_length:]
-            print(f"⚠️ Truncated input from {len(input_ids) + max_input_length} to {len(input_ids)} tokens")
         
         input_tensor = torch.tensor([input_ids]).to(self.device)
         
+        # Convert stop tokens to IDs
+        stop_token_ids = []
+        for token in stop_tokens:
+            if token in self.special_tokens:
+                stop_token_ids.append(self.special_tokens[token])
+        
+        # Use model's generate method - REMOVED pad_token_id
         with torch.no_grad():
-            generated = self.model.generate(
+            generated_ids = self.model.generate(
                 input_tensor,
                 max_length=len(input_ids) + max_length,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p,
-                repetition_penalty=self.config.REPETITION_PENALTY,
-                eos_token_id=self.special_tokens.get("[EOS]")
+                eos_token_id=self.special_tokens.get("[EOS]"),
+                # pad_token_id=self.special_tokens.get("[PAD]"),  # REMOVED - not supported
+                repetition_penalty=self.config.REPETITION_PENALTY
             )
         
-        # Extract response
-        response_tokens = generated[0].cpu().tolist()[len(input_ids):]
-        if self.special_tokens["[EOS]"] in response_tokens:
-            eos_idx = response_tokens.index(self.special_tokens["[EOS]"])
-            response_tokens = response_tokens[:eos_idx]
+        # Extract generated tokens (excluding input)
+        generated_tokens = generated_ids[0].cpu().tolist()[len(input_ids):]
         
-        return self.tokenizer.decode(response_tokens)
+        # Stop at stop tokens
+        for stop_id in stop_token_ids:
+            if stop_id in generated_tokens:
+                stop_idx = generated_tokens.index(stop_id)
+                generated_tokens = generated_tokens[:stop_idx]
+                break
+        
+        return self.tokenizer.decode(generated_tokens)
     
     def _select_mood(self, prompt: str) -> str:
         """Select appropriate mood based on query with enhanced detection"""
@@ -362,8 +390,8 @@ class ElfOwlInference:
         response = re.sub(r'\s+', ' ', response).strip()
         
         # Fix common issues
-        response = re.sub(r'\s+([.,!?;])', r'\1', response)  # Remove spaces before punctuation
-        response = re.sub(r'(\w)\s+\.', r'\1.', response)    # Fix spaced periods
+        response = re.sub(r'\s+([.,!?;])', r'\1', response)
+        response = re.sub(r'(\w)\s+\.', r'\1.', response)
         
         # Ensure proper sentence casing
         if response:
@@ -371,7 +399,6 @@ class ElfOwlInference:
         
         # Ensure proper ending
         if response and response[-1] not in ['.', '!', '?', '"', "'", ':']:
-            # Add appropriate ending based on content
             if any(marker in response.lower() for marker in ['question', 'what', 'why', 'how']):
                 response += '?'
             elif any(marker in response.lower() for marker in ['great', 'wonderful', 'excellent']):
