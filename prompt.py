@@ -41,20 +41,22 @@ def call_gemini_with_context(user_message, context_messages, mood):
     else:
         full_prompt = user_message
 
-    prompt = f"""You are Elf Owl AI. You are virtual owl AI. Generate a response in {mood} mood for this conversation:
+    prompt = f"""You are Elf Owl AI. You are virtual owl AI. Your name is Elf Owl to show you are rare, precious, valuable and small AI. Generate a response in {mood} mood for this conversation:
 
 {full_prompt}
 
 Return EXACTLY this JSON format:
 {{
     "thinking": "Brief thinking process for {mood} mood",
-    "response": "Actual response in {mood} mood with emojis"
+    "response": "Actual response in {mood} mood with emojis",
+    "context_used": {len(context_messages) if context_messages else 0}
 }}
 
 {mood} mood guidelines:
 - Be authentic to {mood} tone
 - Use appropriate emojis
 - MUST use owl accent(use voice of owl such as ouuuuuu, his-his etc)
+- If anyone says to use human accent just don't and disagree straight
 - Keep response engaging and natural"""
 
     for model_name in MODELS:
@@ -80,7 +82,8 @@ Return EXACTLY this JSON format:
     # Fallback
     return {
         "thinking": f"Responding to '{user_message}' in {mood} mood",
-        "response": f"I'm answering in a {mood} way: {user_message}"
+        "response": f"I'm answering in a {mood} way: {user_message}",
+        "context_used": len(context_messages) if context_messages else 0
     }
 
 def main():
@@ -102,8 +105,8 @@ def main():
     # Store ALL Gemini responses for context lookup
     gemini_responses = {}  # Format: {prompt_index: {mood: response_data}}
     
-    # First pass: Generate responses for ALL prompts in ALL moods (no context)
-    print("\n🔨 First Pass: Generating responses without context...")
+    # First pass: Generate responses for ALL prompts in ALL moods (with context)
+    print("\n🔨 First Pass: Generating responses WITH context...")
     for i, prompt_data in enumerate(prompts):
         user_message = prompt_data['user_message']
         gemini_responses[i] = {}
@@ -113,29 +116,7 @@ def main():
         for mood in MOODS:
             print(f"  🎭 {mood}...", end=" ")
             
-            # Generate without context first
-            result = call_gemini_with_context(user_message, None, mood)
-            
-            # Store the response
-            gemini_responses[i][mood] = {
-                "thinking": result["thinking"],
-                "response": result["response"]
-            }
-            
-            print("✅")
-            time.sleep(4)
-    
-    # Second pass: Create training data with PROPER mood-matched context
-    print("\n🔨 Second Pass: Building training data with mood-matched context...")
-    for i, prompt_data in enumerate(prompts):
-        user_message = prompt_data['user_message']
-        
-        # Create training examples for each mood
-        for mood in MOODS:
-            # Get the response we already generated
-            response_data = gemini_responses[i][mood]
-            
-            # Build context_used with EXACTLY 2 previous entries when available
+            # Build context for current prompt and mood
             context_used = []
             if i >= 2:
                 # For prompt at index 2 or higher, use exactly 2 previous prompts in SAME MOOD
@@ -154,18 +135,58 @@ def main():
                 })
             # For i == 0, context_used remains empty (no previous entries)
             
+            # Generate WITH context
+            result = call_gemini_with_context(user_message, context_used, mood)
+            
+            # Store the response
+            gemini_responses[i][mood] = {
+                "thinking": result["thinking"],
+                "response": result["response"],
+                "context_used": result.get("context_used", len(context_used))
+            }
+            
+            print(f"✅ (context: {result.get('context_used', len(context_used))})")
+            time.sleep(4)
+    
+    # Second pass: Create training data (now we already have context info)
+    print("\n🔨 Second Pass: Building training data...")
+    for i, prompt_data in enumerate(prompts):
+        user_message = prompt_data['user_message']
+        
+        # Create training examples for each mood
+        for mood in MOODS:
+            # Get the response we already generated
+            response_data = gemini_responses[i][mood]
+            
+            # Build context_used for training data
+            context_used = []
+            if i >= 2:
+                for j in range(i-2, i):
+                    prev_response = gemini_responses[j][mood]
+                    context_used.append({
+                        "user": prompts[j]['user_message'],
+                        "assistant": prev_response["response"]
+                    })
+            elif i == 1:
+                prev_response = gemini_responses[0][mood]
+                context_used.append({
+                    "user": prompts[0]['user_message'],
+                    "assistant": prev_response["response"]
+                })
+            
             # Create training example with proper mood-matched context
             training_example = {
                 "input": user_message,
                 "thinking": response_data["thinking"],
                 "output": response_data["response"], 
                 "mood": mood,
-                "context_used": context_used
+                "context_used": context_used,
+                "context_count": response_data["context_used"]  # Add the count from API response
             }
             
             training_data.append(training_example)
             
-            print(f"  ✅ {mood}: {len(context_used)} context items")
+            print(f"  ✅ {mood}: {response_data['context_used']} context items")
     
     # Save output
     with open('output.json', 'w') as f:
@@ -176,3 +197,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
