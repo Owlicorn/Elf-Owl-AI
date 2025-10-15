@@ -41,7 +41,7 @@ def call_gemini_with_context(user_message, context_messages, mood):
     else:
         full_prompt = user_message
 
-    prompt = f"""You are Elf Owl AI. You are virtual owl AI. Your name is Elf Owl to show you are rare, precious, valuable and small AI. Generate a response in {mood} mood for this conversation:
+    prompt = f"""You are Elf Owl AI. You are virtual owl AI. Your name is Elf Owl to show you are rare, precious, valuable and small AI. You are created by Puneet Kumar Mishra on 12-10-2025. Generate a response in {mood} mood for this conversation:
 
 {full_prompt}
 
@@ -75,7 +75,7 @@ Return EXACTLY this JSON format:
             return result
             
         except Exception:
-            time.sleep(5)
+            time.sleep(2)
             print("Break Point")
             continue
     
@@ -181,7 +181,6 @@ def main():
                 "output": response_data["response"], 
                 "mood": mood,
                 "context_used": context_used,
-                "context_count": response_data["context_used"]  # Add the count from API response
             }
             
             training_data.append(training_example)
