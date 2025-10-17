@@ -312,7 +312,7 @@ def api_docs():
 if __name__ == '__main__':
     import os
 
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = "0.0.0.0"
     port = int(os.environ.get("PORT", 8080))
 
     print("🚀 Starting Elf Owl AI Server...")
@@ -320,3 +320,4 @@ if __name__ == '__main__':
     print(f"💬 Chat Interface: http://{host}:{port}/chat")
 
     app.run(host=host, port=port, debug=True)
+
