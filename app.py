@@ -310,14 +310,14 @@ def api_docs():
     return jsonify(docs)
 
 if __name__ == '__main__':
+    import os
+
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", 8080))
+
     print("🚀 Starting Elf Owl AI Server...")
-    print(f"🌐 API Documentation: http://{config.Config.API_HOST}:{config.Config.API_PORT}/api/docs")
-    print(f"💬 Chat Interface: http://{config.Config.API_HOST}:{config.Config.API_PORT}/chat")
-    print("🎯 Free Generation Mode: ENABLED")
-    print("📝 User prompts saving: ENABLED (prompt.json)")
-    
-    app.run(
-        host=config.Config.API_HOST,
-        port=config.Config.API_PORT,
-        debug=config.Config.DEBUG
-    )
+    print(f"🌐 API Documentation: http://{host}:{port}/api/docs")
+    print(f"💬 Chat Interface: http://{host}:{port}/chat")
+
+    app.run(host=host, port=port, debug=True)
+
