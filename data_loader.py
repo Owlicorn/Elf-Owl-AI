@@ -283,7 +283,7 @@ class DataLoader:
             })
         
         # Load MongoDB conversations (finite)  
-        mongo_conversations = list(self.load_mongodb_conversations(limit=5000))
+        mongo_conversations = mongo_conversations = list(self.load_mongodb_conversations(limit=self.config.MAX_MONGO_EXAMPLES))
         print(f"🗄️ Loaded {len(mongo_conversations)} conversations from MongoDB")
         
         for conv in mongo_conversations:
