@@ -232,86 +232,98 @@ class DataLoader:
         finally:
             self._close_mongo_connection(client)
     
-    def get_training_pairs(self, max_examples: int = None) -> List[Dict[str, Any]]:
-        """Convert all data to training format with mixed sources"""
-        training_data = []
-        total_pairs_processed = 0
-        
-        # Use mixed streaming for better convergence
-        mixed_stream = self.get_training_pairs_streaming(batch_size=1000)
-        
-        for batch in mixed_stream:
-            for example in batch:
-                training_data.append(example)
-                total_pairs_processed += 1
-                
-                if max_examples and total_pairs_processed >= max_examples:
+    def get_training_pairs_streaming(self, batch_size: int = 1000) -> Iterator[List[Dict]]:
+        """
+        Streaming generator that yields mixed batches from lang_model and MongoDB.
+        Replenishes internal buffers and yields lists of examples of size up to batch_size.
+        """
+        # Ensure buffers start filled
+        while True:
+            # Refill buffers (returns False when both sources exhausted)
+            more_data = self._fill_buffers(target_size=max(batch_size, self._min_buffer_size))
+
+            # If no more data and both buffers empty -> end
+            if not more_data and not self._lang_model_buffer and not self._mongo_buffer:
+                return
+
+            batch: List[Dict] = []
+            while len(batch) < batch_size:
+                # Try to alternate: prefer mongo then lang (keeps real conversations frequent)
+                if self._mongo_buffer:
+                    batch.append(self._mongo_buffer.popleft())
+                if len(batch) >= batch_size:
                     break
-            
-            if max_examples and total_pairs_processed >= max_examples:
-                break
-        
-        # Final shuffle
-        random.shuffle(training_data)
-        
-        print(f"📚 Total training pairs: {len(training_data)}")
-        
-        # Show mixing ratio
-        if training_data:
-            lang_count = sum(1 for d in training_data if d.get('source') == 'lang_model')
-            mongo_count = len(training_data) - lang_count
-            print(f"📊 Mixed ratio: {lang_count} lang_model + {mongo_count} MongoDB examples")
-        
-        return training_data
+                if self._lang_model_buffer:
+                    batch.append(self._lang_model_buffer.popleft())
+                # If both empty, break to attempt refill
+                if not self._mongo_buffer and not self._lang_model_buffer:
+                    break
+
+            if not batch:
+                # Nothing to yield; end
+                return
+
+            yield batch
     
-    def get_training_pairs(self, max_examples: int = 5000) -> List[Dict[str, Any]]:
-        """Convert all data to training format - FIXED for finite data"""
+    def get_training_pairs(self, max_examples: int = None) -> List[Dict[str, Any]]:
+        """Convert all data to training format - non-streaming mode.
+
+        By default this will load all available lang_model lines and all MongoDB
+        conversations up to `config.MAX_MONGO_EXAMPLES`. If `max_examples` is
+        provided, the final list will be trimmed to that length.
+        """
         print("📚 Loading training data (non-streaming mode)...")
-        training_data = []
-        
-        # Load lang_model data (finite)
-        lang_texts = list(self.load_lang_model_data(max_lines=2000))
+        training_data: List[Dict[str, Any]] = []
+
+        # Load lang_model data (all lines)
+        lang_texts = list(self.load_lang_model_data(max_lines=None))
         print(f"📄 Loaded {len(lang_texts)} lines from lang_model.txt")
-        
+
         for text in lang_texts:
             training_data.append({
                 "input": "Write a creative piece of text",
                 "thinking": "I should generate creative text with good grammar and flow",
                 "output": text,
                 "mood": random.choice(["creative", "playful", "wise", "descriptive"]),
-                "context_used": []
+                "context_used": [],
+                "source": "lang_model"
             })
-        
-        # Load MongoDB conversations (finite)  
-        mongo_conversations = list(self.load_mongodb_conversations(limit=5000))
+
+        # Load MongoDB conversations (load ALL available; no artificial 5k cap)
+        # If you want to cap for memory reasons, pass `max_examples` to this method
+        mongo_conversations = list(self.load_mongodb_conversations(limit=None))
         print(f"🗄️ Loaded {len(mongo_conversations)} conversations from MongoDB")
-        
+
         for conv in mongo_conversations:
             input_text = conv.get('input') or conv.get('user_input') or conv.get('question', '')
             output_text = conv.get('output') or conv.get('assistant_response') or conv.get('answer', '')
-            
+
             if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
                 training_data.append({
                     "input": input_text.strip(),
                     "thinking": conv.get('thinking', 'Analyzing the user query and formulating a helpful response').strip(),
                     "output": output_text.strip(),
                     "mood": conv.get('mood', random.choice(self.config.MOODS)),
-                    "context_used": conv.get('context_used', [])
+                    "context_used": conv.get('context_used', []),
+                    "source": "mongodb"
                 })
-        
-        # Final shuffle and limit
-        random.shuffle(training_data)
-        
+
+        # Shuffle training data to improve generalization (keep when requested)
+        # If you need deterministic behavior, set a seed before calling this function.
+        if training_data:
+            random.shuffle(training_data)
+
+        # Optionally trim to max_examples (after shuffling so it's a random subset)
         if max_examples and len(training_data) > max_examples:
             training_data = training_data[:max_examples]
-        
+
         print(f"📚 Total training pairs: {len(training_data)}")
-        
+
         # Show composition
-        lang_count = len([d for d in training_data if "creative piece" in d["input"]])
+        lang_count = len([d for d in training_data if d.get("source") == "lang_model"])
         mongo_count = len(training_data) - lang_count
         print(f"📊 Composition: {lang_count} lang_model + {mongo_count} MongoDB examples")
-        
+
         return training_data
     
     def get_smart_factual_context(self, query: str, max_contexts: int = 3) -> List[Dict]:
