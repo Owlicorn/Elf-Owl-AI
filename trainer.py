@@ -146,7 +146,9 @@ class ElfOwlTrainer:
         
         # Load data for analysis
         print("📚 Loading training data for analysis...")
-        training_pairs = self.data_loader.get_training_pairs(max_examples=5000)
+        # Load ALL training pairs for analysis (no 5k cap). If you want to limit memory,
+        # pass a max_examples value when calling prepare_training or adjust config.MAX_MONGO_EXAMPLES.
+        training_pairs = self.data_loader.get_training_pairs(max_examples=None)
         data_size = len(training_pairs)
         
         # Calculate unique tokens
