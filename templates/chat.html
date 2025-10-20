@@ -1,171 +1,210 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Chat - Elf Owl AI</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - Elf Owl AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; 
-            padding: 0; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+        :root {
+            --primary: #FFD700;
+            --secondary: #00D4FF;
+            --accent: #FF4081;
+            --dark: #121212;
+            --darker: #0A0A0A;
+            --light: #F5F5F5;
+            --card-bg: rgba(30, 30, 30, 0.7);
+            --glow: 0 0 15px var(--primary);
+            --transition: all 0.3s ease;
         }
-        
-        .chat-container { 
-            max-width: 900px; 
-            margin: 20px auto; 
-            background: white; 
-            border-radius: 15px; 
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--darker) 0%, #1a1a2e 50%, var(--dark) 100%);
+            color: var(--light);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .chat-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             display: flex;
             flex-direction: column;
             height: 95vh;
+            border: 1px solid rgba(255, 215, 0, 0.1);
         }
-        
-        .chat-header { 
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white; 
-            padding: 25px; 
+
+        .chat-header {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0, 212, 255, 0.1));
+            color: var(--light);
+            padding: 25px;
             text-align: center;
             position: relative;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
         }
-        
-        .chat-header h2 { 
-            margin: 0; 
-            font-size: 1.8em;
+
+        .chat-header h2 {
+            margin: 0;
+            font-size: 2.2rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 15px;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
         }
-        
-        .chat-header p { 
-            margin: 5px 0 0 0; 
+
+        .chat-header p {
+            margin: 10px 0 0 0;
             opacity: 0.9;
-            font-size: 1.1em;
+            font-size: 1.1rem;
+            color: var(--secondary);
         }
-        
+
         .mood-selector {
-            padding: 15px 25px;
-            border-bottom: 1px solid #e0e0e0;
-            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
             display: flex;
             align-items: center;
             gap: 15px;
             flex-wrap: wrap;
         }
-        
+
         .mood-selector label {
             font-weight: 600;
-            color: #2c3e50;
+            color: var(--primary);
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
         }
-        
+
         .mood-selector select {
-            padding: 8px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            background: white;
+            padding: 10px 15px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: var(--light);
             font-size: 14px;
-            min-width: 150px;
-            transition: all 0.3s ease;
+            min-width: 180px;
+            transition: var(--transition);
         }
-        
+
         .mood-selector select:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
         }
-        
+
         .mood-selector button {
-            padding: 8px 15px;
-            background: #667eea;
-            color: white;
+            padding: 10px 20px;
+            background: linear-gradient(45deg, var(--primary), #FFA500);
+            color: var(--darker);
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 14px;
-            transition: all 0.3s ease;
-        }
-        
-        .mood-selector button:hover {
-            background: #5a6fd8;
-            transform: translateY(-1px);
-        }
-        
-        .current-mood {
-            background: #667eea;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
             font-weight: 600;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .chat-messages { 
+
+        .mood-selector button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .current-mood {
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            color: var(--darker);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chat-messages {
             flex: 1;
-            overflow-y: auto; 
-            padding: 20px; 
-            background: #fafafa;
+            overflow-y: auto;
+            padding: 25px;
+            background: rgba(10, 10, 10, 0.5);
         }
-        
-        .message { 
-            margin: 15px 0; 
-            padding: 15px 20px; 
-            border-radius: 15px; 
-            max-width: 80%;
+
+        .message {
+            margin: 20px 0;
+            padding: 18px 22px;
+            border-radius: 18px;
+            max-width: 85%;
             position: relative;
-            animation: fadeIn 0.3s ease;
-            line-height: 1.5;
+            animation: fadeIn 0.4s ease;
+            line-height: 1.6;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
-        
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
-        .user-message { 
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white; 
+
+        .user-message {
+            background: linear-gradient(135deg, var(--primary), #FFA500);
+            color: var(--darker);
             margin-left: auto;
             border-bottom-right-radius: 5px;
-        }
-        
-        .ai-message { 
-            background: white; 
-            color: #333;
-            border: 1px solid #e0e0e0;
-            border-bottom-left-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .thinking { 
-            background: #fff3cd; 
-            color: #856404; 
-            font-style: italic; 
-            font-size: 0.9em; 
-            padding: 12px 15px; 
-            border-radius: 10px; 
-            margin: 8px 0;
-            border-left: 4px solid #ffc107;
-        }
-        
-        .mood-indicator { 
-            display: inline-block; 
-            background: #667eea; 
-            color: white; 
-            padding: 4px 10px; 
-            border-radius: 12px; 
-            font-size: 0.75em; 
-            margin-left: 10px;
             font-weight: 600;
         }
-        
+
+        .ai-message {
+            background: rgba(30, 30, 30, 0.8);
+            color: var(--light);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-bottom-left-radius: 5px;
+            backdrop-filter: blur(5px);
+        }
+
+        .thinking {
+            background: rgba(255, 215, 0, 0.1);
+            color: var(--primary);
+            font-style: italic;
+            font-size: 0.9em;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin: 12px 0;
+            border-left: 4px solid var(--primary);
+        }
+
+        .mood-indicator {
+            display: inline-block;
+            background: var(--secondary);
+            color: var(--darker);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.75em;
+            margin-left: 10px;
+            font-weight: 700;
+        }
+
         .mood-empathetic { background: #e83e8c; }
         .mood-playful { background: #20c997; }
         .mood-analytical { background: #6f42c1; }
@@ -174,113 +213,133 @@
         .mood-sarcastic { background: #6c757d; }
         .mood-curious { background: #6610f2; }
         .mood-formal { background: #343a40; }
-        
-        .input-area { 
-            display: flex; 
-            padding: 20px; 
-            border-top: 1px solid #e0e0e0;
-            background: white;
-            gap: 10px;
+        .mood-enthusiastic { background: #FF4081; }
+        .mood-calm { background: #00D4FF; }
+        .mood-friendly { background: #FFD700; color: #121212; }
+
+        .input-area {
+            display: flex;
+            padding: 25px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            gap: 15px;
+            align-items: center;
         }
-        
-        .input-area input { 
-            flex: 1; 
-            padding: 12px 15px; 
-            border: 2px solid #e0e0e0; 
-            border-radius: 10px; 
-            font-size: 14px;
-            transition: all 0.3s ease;
+
+        .input-area input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 12px;
+            font-size: 16px;
+            background: rgba(0, 0, 0, 0.5);
+            color: var(--light);
+            transition: var(--transition);
         }
-        
+
         .input-area input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
         }
-        
-        .input-area button { 
-            padding: 12px 25px; 
-            background: #28a745; 
-            color: white; 
-            border: none; 
-            border-radius: 10px; 
-            cursor: pointer; 
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            min-width: 80px;
+
+        .input-area input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
         }
-        
+
+        .input-area button {
+            padding: 15px 30px;
+            background: linear-gradient(45deg, var(--primary), #FFA500);
+            color: var(--darker);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 700;
+            transition: var(--transition);
+            min-width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
         .input-area button:hover {
-            background: #218838;
-            transform: translateY(-1px);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 215, 0, 0.4);
         }
-        
-        .input-area button:disabled { 
-            background: #6c757d; 
+
+        .input-area button:disabled {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
-        
+
         .typing-indicator {
-            padding: 10px 20px;
-            color: #6c757d;
+            padding: 15px 25px;
+            color: var(--secondary);
             font-style: italic;
             display: none;
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 10px;
+            margin: 0 25px;
         }
-        
+
         .typing-dots {
             display: inline-block;
         }
-        
+
         .typing-dots span {
             animation: typing 1.4s infinite;
             opacity: 0.6;
         }
-        
+
         .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
         .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-        
+
         @keyframes typing {
             0%, 60%, 100% { opacity: 0.3; }
             30% { opacity: 1; }
         }
-        
+
         .message-time {
-            font-size: 0.7em;
-            opacity: 0.6;
-            margin-top: 5px;
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-top: 8px;
             text-align: right;
         }
-        
+
         .user-message .message-time {
             text-align: left;
+            color: rgba(0, 0, 0, 0.7);
         }
-        
+
         /* Scrollbar styling */
         .chat-messages::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
         }
-        
+
         .chat-messages::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
         }
-        
+
         .chat-messages::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 3px;
+            background: linear-gradient(var(--primary), var(--secondary));
+            border-radius: 4px;
         }
-        
+
         .chat-messages::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
+            background: linear-gradient(var(--secondary), var(--primary));
         }
-        
+
         /* Responsive design */
-        @media (max-width: 768px) {
+        @media (max-width: 968px) {
             .chat-container {
-                margin: 10px;
                 height: 90vh;
-                border-radius: 10px;
+                margin: 10px;
             }
             
             .message {
@@ -288,24 +347,121 @@
             }
             
             .mood-selector {
-                padding: 10px 15px;
+                padding: 15px;
             }
             
             .mood-selector select {
-                min-width: 120px;
+                min-width: 150px;
             }
+            
+            .chat-header h2 {
+                font-size: 1.8rem;
+            }
+        }
+
+        @media (max-width: 576px) {
+            body {
+                padding: 10px;
+            }
+            
+            .chat-container {
+                height: 85vh;
+                border-radius: 15px;
+            }
+            
+            .message {
+                max-width: 95%;
+                padding: 15px;
+            }
+            
+            .mood-selector {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .mood-selector select {
+                width: 100%;
+            }
+            
+            .input-area {
+                padding: 15px;
+            }
+            
+            .input-area input {
+                padding: 12px 15px;
+            }
+            
+            .input-area button {
+                padding: 12px 20px;
+                min-width: 80px;
+            }
+            
+            .chat-header {
+                padding: 20px 15px;
+            }
+            
+            .chat-header h2 {
+                font-size: 1.5rem;
+            }
+            
+            .chat-messages {
+                padding: 15px;
+            }
+        }
+
+        /* Owl animation in header */
+        .owl-header {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* Glow effect for important elements */
+        .glow {
+            box-shadow: 0 0 15px var(--primary);
+        }
+
+        /* Back button */
+        .back-button {
+            position: absolute;
+            left: 25px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: var(--primary);
+            padding: 10px 15px;
+            border-radius: 10px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .back-button:hover {
+            background: rgba(255, 215, 0, 0.2);
+            transform: translateY(-50%) translateX(-3px);
         }
     </style>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h2>🦉 Chat with Elf Owl AI</h2>
+            <a href="/" class="back-button">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </a>
+            <h2><span class="owl-header">🦉</span> Chat with Elf Owl AI</h2>
             <p>Free Generation • Mood System • Context Aware</p>
         </div>
         
         <div class="mood-selector">
-            <label for="moodSelect">🎭 Response Mood:</label>
+            <label for="moodSelect"><i class="fas fa-theater-masks"></i> Response Mood:</label>
             <select id="moodSelect" onchange="setMood(this.value)">
                 <option value="auto">Auto-detect</option>
                 <option value="playful">Playful 😄</option>
@@ -321,16 +477,20 @@
             </select>
             
             <div class="current-mood" id="currentMoodDisplay">
-                Auto-detect
+                <i class="fas fa-robot"></i> Auto-detect
             </div>
             
-            <button onclick="showAllMoods()">All Moods</button>
-            <button onclick="clearChat()" style="background: #dc3545;">Clear Chat</button>
+            <button onclick="showAllMoods()">
+                <i class="fas fa-list"></i> All Moods
+            </button>
+            <button onclick="clearChat()" style="background: linear-gradient(45deg, #FF4081, #E83E8C);">
+                <i class="fas fa-trash"></i> Clear Chat
+            </button>
         </div>
         
         <div class="chat-messages" id="messages">
             <div class="message ai-message">
-                Hello! I'm Elf Owl AI, your creative and intelligent assistant. 
+                <strong>Hoo-hoo! 🦉</strong> Hello there! I'm Elf Owl AI, your creative and whimsical assistant. 
                 How can I help you today? 
                 <span class="mood-indicator mood-friendly">friendly</span>
                 <div class="message-time" id="welcomeTime"></div>
@@ -344,9 +504,11 @@
         </div>
         
         <div class="input-area">
-            <input type="text" id="messageInput" placeholder="Type your message here..." 
+            <input type="text" id="messageInput" placeholder="Type your message to the owl..." 
                    onkeypress="handleKeyPress(event)" autocomplete="off">
-            <button onclick="sendMessage()" id="sendBtn">Send</button>
+            <button onclick="sendMessage()" id="sendBtn">
+                <i class="fas fa-paper-plane"></i> Send
+            </button>
         </div>
     </div>
 
@@ -376,10 +538,11 @@
         // Set mood function
         function setMood(mood) {
             currentMood = mood;
-            currentMoodDisplay.textContent = mood === 'auto' ? 'Auto-detect' : mood;
+            const moodText = mood === 'auto' ? 'Auto-detect' : mood.charAt(0).toUpperCase() + mood.slice(1);
+            currentMoodDisplay.innerHTML = `<i class="fas fa-robot"></i> ${moodText}`;
             currentMoodDisplay.className = 'current-mood ' + (mood === 'auto' ? '' : `mood-${mood}`);
             
-            showStatus(`Mood set to: ${mood === 'auto' ? 'Auto-detect' : mood}`);
+            showStatus(`Mood set to: ${moodText}`);
         }
         
         // Show all available moods
@@ -409,7 +572,7 @@
                     .then(data => {
                         messagesDiv.innerHTML = `
                             <div class="message ai-message">
-                                Chat history cleared! How can I help you now?
+                                <strong>Hoo-hoo! 🦉</strong> Chat history cleared! How can I help you now?
                                 <span class="mood-indicator mood-friendly">friendly</span>
                                 <div class="message-time">${new Date().toLocaleTimeString()}</div>
                             </div>
@@ -428,17 +591,21 @@
             const status = document.createElement('div');
             status.style.cssText = `
                 position: fixed; top: 20px; right: 20px; 
-                background: #28a745; color: white; padding: 12px 20px; 
-                border-radius: 8px; z-index: 1000; font-weight: 600;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                background: linear-gradient(45deg, var(--primary), var(--secondary)); 
+                color: var(--darker); padding: 12px 20px; 
+                border-radius: 10px; z-index: 1000; font-weight: 700;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
             `;
-            status.textContent = message;
+            status.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
             document.body.appendChild(status);
             setTimeout(() => {
                 status.style.opacity = '0';
                 status.style.transition = 'opacity 0.5s ease';
                 setTimeout(() => status.remove(), 500);
-            }, 2000);
+            }, 3000);
         }
         
         // Add message to chat
@@ -534,7 +701,7 @@
         // Add some helpful tips
         setTimeout(() => {
             addMessage(
-                "💡 Tip: You can change my response mood using the selector above! Try 'playful' for jokes or 'analytical' for detailed explanations.", 
+                "💡 <strong>Pro Tip:</strong> You can change my response mood using the selector above! Try 'playful' for jokes or 'analytical' for detailed explanations.", 
                 'ai', 
                 'friendly'
             );

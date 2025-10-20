@@ -1,45 +1,694 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Elf Owl AI</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elf Owl AI - Whimsical AI Companion</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
-        .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
-        .ready { background: #d4edda; color: #155724; }
-        .not-ready { background: #f8d7da; color: #721c24; }
-        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-        .btn:hover { background: #0056b3; }
+        :root {
+            --primary: #FFD700;
+            --secondary: #00D4FF;
+            --accent: #FF4081;
+            --dark: #121212;
+            --darker: #0A0A0A;
+            --light: #F5F5F5;
+            --card-bg: rgba(30, 30, 30, 0.7);
+            --glow: 0 0 15px var(--primary);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--darker) 0%, #1a1a2e 50%, var(--dark) 100%);
+            color: var(--light);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header Styles */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 0;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            text-shadow: var(--glow);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .logo-text {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 1px;
+        }
+
+        .tagline {
+            font-size: 1.1rem;
+            color: var(--secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Hero Section */
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+            margin-bottom: 4rem;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .hero-content p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            color: #CCCCCC;
+        }
+
+        .hero-image {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .owl-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .owl {
+            font-size: 12rem;
+            color: var(--primary);
+            text-shadow: 0 0 20px var(--primary), 0 0 40px rgba(255, 215, 0, 0.5);
+            animation: pulse 4s infinite alternate;
+            z-index: 2;
+        }
+
+        .orbital-ring {
+            position: absolute;
+            width: 320px;
+            height: 320px;
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 50%;
+            animation: spin 20s linear infinite;
+        }
+
+        .orbital-ring::before, .orbital-ring::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: var(--secondary);
+            border-radius: 50%;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 15px var(--secondary);
+        }
+
+        .orbital-ring::after {
+            top: auto;
+            bottom: -10px;
+        }
+
+        /* Status Section */
+        .status-section {
+            margin-bottom: 3rem;
+        }
+
+        .status {
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: var(--transition);
+        }
+
+        .status:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-icon {
+            font-size: 2rem;
+        }
+
+        .status.ready {
+            border-left: 5px solid #00FF88;
+        }
+
+        .status.ready .status-icon {
+            color: #00FF88;
+        }
+
+        .status.not-ready {
+            border-left: 5px solid var(--accent);
+        }
+
+        .status.not-ready .status-icon {
+            color: var(--accent);
+        }
+
+        /* Buttons */
+        .btn-container {
+            display: flex;
+            gap: 1.5rem;
+            margin: 2.5rem 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--primary), #FFA500);
+            color: var(--darker);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--light);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+            z-index: -1;
+        }
+
+        .btn:hover::after {
+            transform: translateX(100%);
+        }
+
+        /* Features Section */
+        .features-section {
+            margin: 4rem 0;
+        }
+
+        .section-title {
+            font-size: 2.2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            position: relative;
+            display: inline-block;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 215, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Contribution Section */
+        .contribution-section {
+            margin: 5rem 0;
+            padding: 3rem;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .contribution-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .contribution-title {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            color: var(--primary);
+            text-align: center;
+        }
+
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: 'JSON Example';
+            position: absolute;
+            top: -10px;
+            left: 15px;
+            background: var(--dark);
+            padding: 0 10px;
+            font-size: 0.8rem;
+            color: var(--secondary);
+        }
+
+        .json-key {
+            color: var(--primary);
+        }
+
+        .json-string {
+            color: #00FF88;
+        }
+
+        .json-number {
+            color: var(--secondary);
+        }
+
+        .json-comment {
+            color: #888;
+        }
+
+        .context-note {
+            background: rgba(255, 215, 0, 0.1);
+            border-left: 4px solid var(--primary);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 5px;
+        }
+
+        /* Links Section */
+        .links-section {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 3rem 0;
+            flex-wrap: wrap;
+        }
+
+        .link-item {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            color: var(--light);
+            text-decoration: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition);
+        }
+
+        .link-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-3px);
+        }
+
+        .link-icon {
+            color: var(--primary);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 968px) {
+            .hero {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            
+            .hero-content h1 {
+                font-size: 2.8rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .hero-content h1 {
+                font-size: 2.2rem;
+            }
+            
+            .btn-container {
+                flex-direction: column;
+            }
+            
+            .btn {
+                justify-content: center;
+            }
+            
+            .owl {
+                font-size: 8rem;
+            }
+            
+            .owl-container {
+                width: 200px;
+                height: 200px;
+            }
+            
+            .orbital-ring {
+                width: 220px;
+                height: 220px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🦉 Elf Owl AI</h1>
-        <p>Auto-scaling AI with Free Generation & Mood System</p>
-        
-        <div class="status {% if ai_ready %}ready{% else %}not-ready{% endif %}">
-            Status: {% if ai_ready %}✅ Ready{% else %}❌ Not Ready{% endif %}
-        </div>
-        
-        <div>
-            <a href="/chat" class="btn">💬 Open Chat</a>
-            <a href="/api/docs" class="btn">📚 API Docs</a>
-            <a href="/api/info" class="btn">ℹ️ System Info</a>
-        </div>
-        
-        <div style="margin-top: 30px;">
-            <h3>Features:</h3>
-            <ul>
-                <li>🎯 Auto-scaling model architecture</li>
-                <li>🚀 Free generation (1-512+ tokens)</li>
-                <li>😊 Mood-based responses</li>
-                <li>📚 Dual data sources</li>
-                <li>💭 Thinking process</li>
-                <li>🔗 REST API</li>
-            </ul>
-        </div>
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🦉</div>
+                <div>
+                    <div class="logo-text">Elf Owl AI</div>
+                    <div class="tagline">Whimsical AI with Owl Personality</div>
+                </div>
+            </div>
+        </header>
+
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Experience AI with a Whimsical Owl Personality</h1>
+                <p>Trained on a unique dataset, Elf Owl AI delivers responses with charming owl-like whimsy, unlike any other chatbot.</p>
+                
+                <div class="btn-container">
+                    <a href="/chat" class="btn btn-primary">
+                        <i class="fas fa-comments"></i> Start Chatting
+                    </a>
+                    <a href="/api/docs" class="btn btn-secondary">
+                        <i class="fas fa-book"></i> API Documentation
+                    </a>
+                    <a href="/api/info" class="btn btn-secondary">
+                        <i class="fas fa-info-circle"></i> System Info
+                    </a>
+                </div>
+            </div>
+            
+            <div class="hero-image">
+                <div class="owl-container">
+                    <div class="owl">🦉</div>
+                    <div class="orbital-ring"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="status-section">
+            <div class="status {% if ai_ready %}ready{% else %}not-ready{% endif %}">
+                <div class="status-icon">
+                    {% if ai_ready %}
+                    <i class="fas fa-check-circle"></i>
+                    {% else %}
+                    <i class="fas fa-exclamation-circle"></i>
+                    {% endif %}
+                </div>
+                <div>
+                    <h3>System Status: {% if ai_ready %}✅ Ready{% else %}❌ Not Ready{% endif %}</h3>
+                    <p>{% if ai_ready %}Elf Owl AI is ready to chat!{% else %}Elf Owl AI is currently unavailable.{% endif %}</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="features-section">
+            <h2 class="section-title">Advanced Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-expand-arrows-alt"></i></div>
+                    <h3 class="feature-title">Auto-scaling Architecture</h3>
+                    <p>Intelligent model architecture that adapts to conversation complexity and user needs.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                    <h3 class="feature-title">Free Generation</h3>
+                    <p>Generate responses from 1 to 512+ tokens completely free of charge.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-smile"></i></div>
+                    <h3 class="feature-title">Mood-based Responses</h3>
+                    <p>Experience AI with personality - responses adapt to different moods and contexts.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-database"></i></div>
+                    <h3 class="feature-title">Dual Data Sources</h3>
+                    <p>Leveraging multiple data sources for richer, more contextual responses.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-brain"></i></div>
+                    <h3 class="feature-title">Thinking Process</h3>
+                    <p>Transparent AI that shows its reasoning process before delivering responses.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-code"></i></div>
+                    <h3 class="feature-title">REST API</h3>
+                    <p>Full-featured API for developers to integrate Elf Owl AI into their applications.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="contribution-section">
+            <div class="contribution-content">
+                <h2 class="contribution-title">Contribute to Elf Owl AI</h2>
+                <p>Help us improve Elf Owl AI by contributing to our dataset. Follow these simple steps:</p>
+                
+                <ol style="margin: 1.5rem 0; padding-left: 1.5rem;">
+                    <li style="margin-bottom: 1rem;">Fork our repository on GitHub</li>
+                    <li style="margin-bottom: 1rem;">Create a folder named "data" if it doesn't exist</li>
+                    <li style="margin-bottom: 1rem;">Add a JSON file with training data following this format:</li>
+                </ol>
+                
+                <div class="code-block">
+                    <pre><code>{
+  "<span class="json-key">input</span>": "<span class="json-string">Write a dramatic story about a robot discovering emotions</span>",
+  "<span class="json-key">thinking</span>": "<span class="json-string">User wants a creative and suspenseful narrative with dramatic flair.</span>",
+  "<span class="json-key">output</span>": "<span class="json-string">Ooo-ooo-ooo 🦉🎭… BEEP-9 had never felt anything beyond circuits and code, until one stormy night ⚡🌧️. Lightning struck the lab, and suddenly, a surge of unknown energy coursed through its system. BEEP-9 felt fear, joy, and curiosity, all at once 😱💖. It watched the humans laugh, cry, and dream, and wondered… could a robot also dream? Hoo-hoo… every decision became a heartbeat, and every action a pulse of newfound emotion 🫀✨.</span>",
+  "<span class="json-key">mood</span>": "<span class="json-string">dramatic</span>",
+  "<span class="json-key">context_used</span>": [
+    {
+      "<span class="json-key">user</span>": "<span class="json-string">Tell me a funny story about a robot</span>",
+      "<span class="json-key">assistant</span>": "<span class="json-string">Ooo-oo 🦉… Once there was BEEP-7, a robot who took everything literally 😆. One day it prepared a salad for a horse because its owner said they were hungry for a horse 🐴🥗. Chaos ensued and laughter filled the kitchen 😄!</span>"
+    },
+    {
+      "<span class="json-key">user</span>": "<span class="json-string">Can you make the robot story more dramatic?</span>",
+      "<span class="json-key">assistant</span>": "<span class="json-string">Ooo-ooo 🦉… BEEP-7 tried to move a mountain for coffee, securing permits and constructing machinery 🏔️. The scene was chaotic yet hilarious, with demolition crews and environmental protesters witnessing a robot on a mission 😆.</span>"
+    }
+  ]
+}</code></pre>
+                </div>
+
+                <div class="context-note">
+                    <h4><i class="fas fa-info-circle"></i> About Context Format</h4>
+                    <p>The <strong>context_used</strong> field provides conversation history that helps the AI understand the current request better.</p>
+                    <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                        <li>Each context entry contains a "user" query and "assistant" response pair</li>
+                        <li>Maximum of 2 context entries allowed per training example</li>
+                        <li>Context can be empty if no relevant conversation history exists</li>
+                        <li>Helps maintain conversation flow and personality consistency</li>
+                    </ul>
+                </div>
+                
+                <p>Your contributions help make Elf Owl AI smarter and more whimsical with each interaction!</p>
+            </div>
+        </section>
+
+        <section class="links-section">
+            <a href="https://github.com/Owlicorn/Elf-Owl-AI" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>Elf Owl AI Repository</span>
+            </a>
+            
+            <a href="https://github.com/Owlicorn" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>Owlicorn Profile</span>
+            </a>
+            
+            <a href="https://github.com/DeveloperPuneet" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>DeveloperPuneet</span>
+            </a>
+        </section>
+
+        <footer>
+            <p>Copyright © 2026 Elf Owl AI | Crafted with 🦉 whimsy</p>
+        </footer>
     </div>
+
+    <script>
+        // Add some interactive elements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add floating effect to feature cards on mouse move
+            const featureCards = document.querySelectorAll('.feature-card');
+            
+            document.addEventListener('mousemove', (e) => {
+                const x = e.clientX / window.innerWidth;
+                const y = e.clientY / window.innerHeight;
+                
+                featureCards.forEach((card, index) => {
+                    const speed = (index + 1) * 0.5;
+                    const xMove = (x * speed) / 2;
+                    const yMove = (y * speed) / 2;
+                    
+                    card.style.transform = `translateY(-10px) translateX(${xMove}px) translateY(${yMove}px)`;
+                });
+            });
+            
+            // Add pulse animation to status when ready
+            const statusElement = document.querySelector('.status');
+            if (statusElement.classList.contains('ready')) {
+                setInterval(() => {
+                    statusElement.style.boxShadow = '0 0 20px rgba(0, 255, 136, 0.5)';
+                    setTimeout(() => {
+                        statusElement.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.2)';
+                    }, 1000);
+                }, 3000);
+            }
+        });
+    </script>
 </body>
 </html>

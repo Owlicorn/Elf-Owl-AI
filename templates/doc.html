@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - Elf Owl AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #FFD700;
+            --secondary: #00D4FF;
+            --accent: #FF4081;
+            --dark: #121212;
+            --darker: #0A0A0A;
+            --light: #F5F5F5;
+            --card-bg: rgba(30, 30, 30, 0.7);
+            --glow: 0 0 15px var(--primary);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--darker) 0%, #1a1a2e 50%, var(--dark) 100%);
+            color: var(--light);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header Styles */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 0;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            text-shadow: var(--glow);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .logo-text {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 1px;
+        }
+
+        .tagline {
+            font-size: 1.1rem;
+            color: var(--secondary);
+            margin-top: 0.5rem;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-btn {
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+        }
+
+        .nav-btn-primary {
+            background: linear-gradient(45deg, var(--primary), #FFA500);
+            color: var(--darker);
+        }
+
+        .nav-btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--light);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4);
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 3rem 2rem;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.3rem;
+            color: #CCCCCC;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* API Content */
+        .api-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            margin-bottom: 4rem;
+        }
+
+        @media (max-width: 968px) {
+            .api-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .endpoints-section, .features-section {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-title {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .endpoint-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition);
+        }
+
+        .endpoint-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 215, 0, 0.3);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .endpoint-method {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .method-post {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+        }
+
+        .method-get {
+            background: linear-gradient(45deg, #17a2b8, #00D4FF);
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+
+        .endpoint-description {
+            color: #CCCCCC;
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+        }
+
+        .parameters-title {
+            font-weight: 600;
+            color: var(--secondary);
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .parameter-item {
+            display: flex;
+            margin-bottom: 0.8rem;
+            padding: 0.8rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .parameter-name {
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 120px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .parameter-desc {
+            color: #CCCCCC;
+            flex: 1;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 215, 0, 0.3);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            color: var(--primary);
+            min-width: 50px;
+        }
+
+        .feature-text {
+            color: #CCCCCC;
+            font-size: 1.1rem;
+        }
+
+        /* Code Example */
+        .code-section {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            margin-bottom: 4rem;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: 'Example Request';
+            position: absolute;
+            top: -10px;
+            left: 15px;
+            background: var(--dark);
+            padding: 0 10px;
+            font-size: 0.8rem;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .json-key {
+            color: var(--primary);
+        }
+
+        .json-string {
+            color: #00FF88;
+        }
+
+        .json-number {
+            color: var(--secondary);
+        }
+
+        .json-comment {
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Links Section */
+        .links-section {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 3rem 0;
+            flex-wrap: wrap;
+        }
+
+        .link-item {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            color: var(--light);
+            text-decoration: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition);
+        }
+
+        .link-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-3px);
+        }
+
+        .link-icon {
+            color: var(--primary);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .endpoints-section, .features-section, .code-section {
+                padding: 1.5rem;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                width: 100%;
+                margin-top: 1rem;
+            }
+            
+            .nav-btn {
+                justify-content: center;
+            }
+            
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .parameter-item {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .parameter-name {
+                min-width: auto;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .hero p {
+                font-size: 1.1rem;
+            }
+            
+            .section-title {
+                font-size: 1.5rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🦉</div>
+                <div>
+                    <div class="logo-text">Elf Owl AI</div>
+                    <div class="tagline">API Documentation</div>
+                </div>
+            </div>
+            <div class="nav-buttons">
+                <a href="/" class="nav-btn nav-btn-secondary">
+                    <i class="fas fa-home"></i> Home
+                </a>
+                <a href="/chat" class="nav-btn nav-btn-primary">
+                    <i class="fas fa-comments"></i> Chat
+                </a>
+            </div>
+        </header>
+
+        <section class="hero">
+            <h1>API Documentation</h1>
+            <p>Explore the complete Elf Owl AI API with detailed endpoints, parameters, and examples. Integrate our whimsical AI into your applications.</p>
+        </section>
+
+        <div class="api-content">
+            <section class="endpoints-section">
+                <h2 class="section-title"><i class="fas fa-code"></i> API Endpoints</h2>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-post">POST</span>
+                        <span class="endpoint-path">/api/chat</span>
+                    </div>
+                    <p class="endpoint-description">Chat with Elf Owl AI using our conversational endpoint.</p>
+                    
+                    <div class="parameters-title">
+                        <i class="fas fa-list"></i> Parameters
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">message</span>
+                        <span class="parameter-desc">string (required) - User message to send to Elf Owl AI</span>
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">max_length</span>
+                        <span class="parameter-desc">integer (optional) - Maximum tokens to generate (default: 512)</span>
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">temperature</span>
+                        <span class="parameter-desc">float (optional) - Generation temperature (0.1 to 2.0)</span>
+                    </div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-post">POST</span>
+                        <span class="endpoint-path">/api/generate</span>
+                    </div>
+                    <p class="endpoint-description">Direct text generation without conversational context.</p>
+                    
+                    <div class="parameters-title">
+                        <i class="fas fa-list"></i> Parameters
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">prompt</span>
+                        <span class="parameter-desc">string (required) - Input prompt for text generation</span>
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">max_length</span>
+                        <span class="parameter-desc">integer (optional) - Maximum tokens to generate</span>
+                    </div>
+                    
+                    <div class="parameter-item">
+                        <span class="parameter-name">temperature</span>
+                        <span class="parameter-desc">float (optional) - Generation temperature</span>
+                    </div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-post">POST</span>
+                        <span class="endpoint-path">/api/clear</span>
+                    </div>
+                    <p class="endpoint-description">Clear the current conversation history and context.</p>
+                    <div class="parameters-title">
+                        <i class="fas fa-info-circle"></i> No parameters required
+                    </div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/info</span>
+                    </div>
+                    <p class="endpoint-description">Get detailed system information and model status.</p>
+                    <div class="parameters-title">
+                        <i class="fas fa-info-circle"></i> No parameters required
+                    </div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/health</span>
+                    </div>
+                    <p class="endpoint-description">Health check endpoint to verify API availability.</p>
+                    <div class="parameters-title">
+                        <i class="fas fa-info-circle"></i> No parameters required
+                    </div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/stats</span>
+                    </div>
+                    <p class="endpoint-description">Get training data statistics and model metrics.</p>
+                    <div class="parameters-title">
+                        <i class="fas fa-info-circle"></i> No parameters required
+                    </div>
+                </div>
+            </section>
+            
+            <section class="features-section">
+                <h2 class="section-title"><i class="fas fa-star"></i> API Features</h2>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-expand-arrows-alt"></i></div>
+                        <div class="feature-text">Auto-scaling model architecture</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="feature-text">Free generation (1-512+ tokens)</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-smile"></i></div>
+                        <div class="feature-text">Mood-based responses</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-database"></i></div>
+                        <div class="feature-text">Dual data sources (lang_model.txt + MongoDB)</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-brain"></i></div>
+                        <div class="feature-text">Conversation context awareness</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="fas fa-eye"></i></div>
+                        <div class="feature-text">Thinking process visualization</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+        
+        <section class="code-section">
+            <h2 class="section-title"><i class="fas fa-terminal"></i> Example Usage</h2>
+            
+            <p style="margin-bottom: 1.5rem; color: #CCCCCC;">Here's an example of how to use the chat endpoint with JavaScript:</p>
+            
+            <div class="code-block">
+                <pre><code>fetch(<span class="json-string">'/api/chat'</span>, {
+  <span class="json-key">method</span>: <span class="json-string">'POST'</span>,
+  <span class="json-key">headers</span>: {
+    <span class="json-string">'Content-Type'</span>: <span class="json-string">'application/json'</span>
+  },
+  <span class="json-key">body</span>: JSON.stringify({
+    <span class="json-key">message</span>: <span class="json-string">'Tell me a story about a robot discovering emotions'</span>,
+    <span class="json-key">max_length</span>: <span class="json-number">256</span>,
+    <span class="json-key">temperature</span>: <span class="json-number">0.8</span>
+  })
+})
+.then(response => response.json())
+.then(data => {
+  console.log(<span class="json-string">'AI Response:'</span>, data.response);
+  console.log(<span class="json-string">'Mood:'</span>, data.mood);
+  <span class="json-comment">// Handle the response</span>
+})
+.catch(error => {
+  console.error(<span class="json-string">'Error:'</span>, error);
+});</code></pre>
+            </div>
+            
+            <p style="margin-top: 1.5rem; color: #CCCCCC;">The API will return a JSON response with the AI's answer, mood, and thinking process.</p>
+        </section>
+        
+        <section class="links-section">
+            <a href="https://github.com/Owlicorn/Elf-Owl-AI" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>Elf Owl AI Repository</span>
+            </a>
+            
+            <a href="https://github.com/Owlicorn" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>Owlicorn Profile</span>
+            </a>
+            
+            <a href="https://github.com/DeveloperPuneet" class="link-item" target="_blank">
+                <i class="fab fa-github link-icon"></i>
+                <span>DeveloperPuneet</span>
+            </a>
+        </section>
+
+        <footer>
+            <p>Copyright © 2026 Elf Owl AI | Crafted with 🦉 whimsy</p>
+        </footer>
+    </div>
+
+    <script>
+        // Add some interactive elements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add hover effects to endpoint cards
+            const endpointCards = document.querySelectorAll('.endpoint-card');
+            
+            endpointCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-5px)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+            
+            // Add click effect to feature cards
+            const featureCards = document.querySelectorAll('.feature-card');
+            
+            featureCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    this.style.transform = 'scale(0.98)';
+                    setTimeout(() => {
+                        this.style.transform = '';
+                    }, 150);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

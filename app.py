@@ -5,7 +5,7 @@ from datetime import datetime
 from inference import ElfOwlInference
 import config
 
-# !pip install torch numpy tqdm pymongo tokenizers flask python-dotenv google-generativeai dotenv
+# !pip install torch numpy tqdm pymongo tokenizers flask python-dotenv google-generativeai 
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'elf-owl-secret-key-2024')
@@ -307,7 +307,7 @@ def api_docs():
             'Thinking process visualization'
         ]
     }
-    return jsonify(docs)
+    return render_template('doc.html')
 
 if __name__ == '__main__':
     import os
