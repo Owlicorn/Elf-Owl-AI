@@ -17,17 +17,20 @@ class DataLoader:
         self._tokenizer = None
         self.persistent_mongo = persistent_mongo
         self._mongo_client = None
+        self._maths_mongo_client = None  # New client for math data
         self._context_cache = {}  # Cache for semantic search results
         self._last_cache_clear = time.time()
         
-        # For mixing streams
+        # For mixing streams - added math buffer
         self._lang_model_buffer = deque()
         self._mongo_buffer = deque()
+        self._maths_buffer = deque()  # New buffer for math data
         self._min_buffer_size = 100
         
         # Initialize connections if persistent mode
         if persistent_mongo:
             self._get_mongo_connection()
+            self._get_maths_mongo_connection()  # Initialize math connection
     
     def set_tokenizer(self, tokenizer):
         """Set tokenizer for proper token counting and semantic search"""
@@ -71,14 +74,54 @@ class DataLoader:
         except Exception as e:
             print(f"❌ MongoDB connection failed: {e}")
             return None
+
+    def _get_maths_mongo_connection(self) -> Optional[MongoClient]:
+        """Get Math Training MongoDB connection with persistence option"""
+        if self._maths_mongo_client and self.persistent_mongo:
+            try:
+                # Test if connection is still alive
+                self._maths_mongo_client.admin.command('ping')
+                return self._maths_mongo_client
+            except:
+                # Connection died, reset it
+                self._maths_mongo_client = None
+        
+        if not self.config.MATHS_TRAINING_URL:
+            print("⚠️ Math training MongoDB URL not configured")
+            return None
+        
+        try:
+            client = MongoClient(
+                self.config.MATHS_TRAINING_URL,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=10000,
+                socketTimeoutMS=30000,
+                maxPoolSize=15,
+                minPoolSize=3 if self.persistent_mongo else 1,
+                maxIdleTimeMS=30000,
+                waitQueueTimeoutMS=10000
+            )
+            
+            # Test connection
+            client.admin.command('ping')
+            
+            if self.persistent_mongo:
+                self._maths_mongo_client = client
+                print("🔗 Persistent Math Training MongoDB connection established")
+            
+            return client
+            
+        except Exception as e:
+            print(f"❌ Math Training MongoDB connection failed: {e}")
+            return None
     
-    def _close_mongo_connection(self, client):
-        """Close MongoDB connection gracefully (unless persistent)"""
-        if client and (client is not self._mongo_client or not self.persistent_mongo):
+    def _close_maths_mongo_connection(self, client):
+        """Close Math Training MongoDB connection gracefully (unless persistent)"""
+        if client and (client is not self._maths_mongo_client or not self.persistent_mongo):
             try:
                 client.close()
             except Exception as e:
-                print(f"⚠️ Error closing MongoDB connection: {e}")
+                print(f"⚠️ Error closing Math Training MongoDB connection: {e}")
     
     def _semantic_similarity(self, query: str, document: Dict) -> float:
         """Calculate semantic similarity between query and document"""
@@ -124,11 +167,13 @@ class DataLoader:
         return len(common_words) / len(query_words)
     
     def _fill_buffers(self, target_size: int = 500):
-        """Fill both lang_model and MongoDB buffers for mixed streaming. Returns True if any new data was added, False if both sources are exhausted."""
+        """Fill all three buffers (lang_model, MongoDB, Math Training) for mixed streaming."""
         lang_model_exhausted = False
         mongo_exhausted = False
+        maths_exhausted = False
         lang_added = 0
         mongo_added = 0
+        maths_added = 0
 
         # Fill lang_model buffer
         if len(self._lang_model_buffer) < target_size:
@@ -174,8 +219,32 @@ class DataLoader:
         else:
             mongo_exhausted = False
 
-        # If both sources could not add any new data, signal exhaustion
-        return not (lang_model_exhausted and mongo_exhausted)
+        # Fill Math Training buffer
+        if len(self._maths_buffer) < target_size:
+            maths_stream = self.load_maths_training_data(limit=target_size * 2)
+            for math_example in maths_stream:
+                input_text = math_example.get('input', '')
+                output_text = math_example.get('output', '')
+
+                if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
+                    self._maths_buffer.append({
+                        "input": input_text.strip(),
+                        "thinking": "Solving the mathematical problem step by step with clear reasoning",
+                        "output": output_text.strip(),
+                        "mood": random.choice(["analytical", "precise", "logical", "educational"]),
+                        "context_used": [],
+                        "source": "math_training"
+                    })
+                    maths_added += 1
+                    if len(self._maths_buffer) >= target_size * 2:
+                        break
+            if maths_added == 0:
+                maths_exhausted = True
+        else:
+            maths_exhausted = False
+
+        # If all sources could not add any new data, signal exhaustion
+        return not (lang_model_exhausted and mongo_exhausted and maths_exhausted)
     
     def load_lang_model_data(self, max_lines: int = None) -> Iterator[str]:
         """Load raw text data for language modeling with streaming support"""
@@ -231,32 +300,71 @@ class DataLoader:
             print(f"❌ MongoDB streaming error: {e}")
         finally:
             self._close_mongo_connection(client)
+
+    def load_maths_training_data(self, limit: int = None) -> Iterator[Dict]:
+        """Load math training data from MongoDB with streaming support"""
+        client = self._get_maths_mongo_connection()
+        if not client:
+            print("⚠️ Math training MongoDB not available")
+            return
+        
+        try:
+            db = client[self.config.MATHS_TRAINING_DB]
+            collection = db[self.config.MATHS_TRAIN_COLLECTION]
+            
+            cursor = collection.find({})
+            if limit:
+                cursor = cursor.limit(limit)
+            
+            count = 0
+            for doc in cursor:
+                yield doc
+                count += 1
+                
+                if count % 1000 == 0:
+                    time.sleep(0.001)
+            
+            print(f"✅ Streamed {count} examples from Math Training DB")
+            
+        except Exception as e:
+            print(f"❌ Math Training MongoDB streaming error: {e}")
+        finally:
+            self._close_maths_mongo_connection(client)
     
     def get_training_pairs_streaming(self, batch_size: int = 1000) -> Iterator[List[Dict]]:
         """
-        Streaming generator that yields mixed batches from lang_model and MongoDB.
+        Streaming generator that yields mixed batches from lang_model, MongoDB, and Math Training.
         Replenishes internal buffers and yields lists of examples of size up to batch_size.
         """
         # Ensure buffers start filled
         while True:
-            # Refill buffers (returns False when both sources exhausted)
+            # Refill buffers (returns False when all sources exhausted)
             more_data = self._fill_buffers(target_size=max(batch_size, self._min_buffer_size))
 
-            # If no more data and both buffers empty -> end
-            if not more_data and not self._lang_model_buffer and not self._mongo_buffer:
+            # If no more data and all buffers empty -> end
+            if not more_data and not self._lang_model_buffer and not self._mongo_buffer and not self._maths_buffer:
                 return
 
             batch: List[Dict] = []
             while len(batch) < batch_size:
-                # Try to alternate: prefer mongo then lang (keeps real conversations frequent)
+                # Alternate between sources for balanced training
                 if self._mongo_buffer:
                     batch.append(self._mongo_buffer.popleft())
                 if len(batch) >= batch_size:
                     break
+                    
                 if self._lang_model_buffer:
                     batch.append(self._lang_model_buffer.popleft())
-                # If both empty, break to attempt refill
-                if not self._mongo_buffer and not self._lang_model_buffer:
+                if len(batch) >= batch_size:
+                    break
+                    
+                if self._maths_buffer:
+                    batch.append(self._maths_buffer.popleft())
+                if len(batch) >= batch_size:
+                    break
+                    
+                # If all empty, break to attempt refill
+                if not self._mongo_buffer and not self._lang_model_buffer and not self._maths_buffer:
                     break
 
             if not batch:
@@ -266,12 +374,7 @@ class DataLoader:
             yield batch
     
     def get_training_pairs(self, max_examples: int = None) -> List[Dict[str, Any]]:
-        """Convert all data to training format - non-streaming mode.
-
-        By default this will load all available lang_model lines and all MongoDB
-        conversations up to `config.MAX_MONGO_EXAMPLES`. If `max_examples` is
-        provided, the final list will be trimmed to that length.
-        """
+        """Convert all data to training format - non-streaming mode."""
         print("📚 Loading training data (non-streaming mode)...")
         training_data: List[Dict[str, Any]] = []
 
@@ -289,8 +392,7 @@ class DataLoader:
                 "source": "lang_model"
             })
 
-        # Load MongoDB conversations (load ALL available; no artificial 5k cap)
-        # If you want to cap for memory reasons, pass `max_examples` to this method
+        # Load MongoDB conversations
         mongo_conversations = list(self.load_mongodb_conversations(limit=None))
         print(f"🗄️ Loaded {len(mongo_conversations)} conversations from MongoDB")
 
@@ -308,8 +410,25 @@ class DataLoader:
                     "source": "mongodb"
                 })
 
-        # Shuffle training data to improve generalization (keep when requested)
-        # If you need deterministic behavior, set a seed before calling this function.
+        # Load Math Training data
+        maths_data = list(self.load_maths_training_data(limit=None))
+        print(f"🔢 Loaded {len(maths_data)} examples from Math Training DB")
+
+        for math_example in maths_data:
+            input_text = math_example.get('input', '')
+            output_text = math_example.get('output', '')
+
+            if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
+                training_data.append({
+                    "input": input_text.strip(),
+                    "thinking": "Solving the mathematical problem step by step with clear reasoning",
+                    "output": output_text.strip(),
+                    "mood": random.choice(["analytical", "precise", "logical", "educational"]),
+                    "context_used": [],
+                    "source": "math_training"
+                })
+
+        # Shuffle training data to improve generalization
         if training_data:
             random.shuffle(training_data)
 
@@ -321,13 +440,14 @@ class DataLoader:
 
         # Show composition
         lang_count = len([d for d in training_data if d.get("source") == "lang_model"])
-        mongo_count = len(training_data) - lang_count
-        print(f"📊 Composition: {lang_count} lang_model + {mongo_count} MongoDB examples")
+        mongo_count = len([d for d in training_data if d.get("source") == "mongodb"])
+        maths_count = len([d for d in training_data if d.get("source") == "math_training"])
+        print(f"📊 Composition: {lang_count} lang_model + {mongo_count} MongoDB + {maths_count} Math Training examples")
 
         return training_data
     
     def get_smart_factual_context(self, query: str, max_contexts: int = 3) -> List[Dict]:
-        """SMARTER CONTEXT RETRIEVAL using semantic search"""
+        """SMARTER CONTEXT RETRIEVAL using semantic search - now includes math data"""
         # Clear cache every hour to prevent staleness
         if time.time() - self._last_cache_clear > 3600:
             self._context_cache.clear()
@@ -338,51 +458,80 @@ class DataLoader:
         if cache_key in self._context_cache:
             return self._context_cache[cache_key]
         
-        client = self._get_mongo_connection()
-        if not client:
-            return []
+        # Check if query is math-related
+        math_keywords = ['calculate', 'solve', 'math', 'equation', 'formula', 'derivative', 'integral', 
+                        'algebra', 'geometry', 'trigonometry', 'calculus', 'statistics', 'probability']
+        is_math_query = any(keyword in query.lower() for keyword in math_keywords)
         
-        try:
-            db = client[self.config.DATABASE_NAME]
-            collection = db[self.config.COLLECTION_NAME]
-            
-            # Get candidate documents
-            candidates = []
-            for doc in collection.find().limit(200):  # Increased for better semantic search
-                score = self._semantic_similarity(query, doc)
-                if score > 0.05:  # Minimum similarity threshold
-                    candidates.append({
-                        'score': score,
-                        'input': doc.get('input', ''),
-                        'output': doc.get('output', ''),
-                        'thinking': doc.get('thinking', ''),
-                        'mood': doc.get('mood', 'neutral'),
-                        'similarity_type': 'semantic' if self._tokenizer else 'keyword'
-                    })
-            
-            # Also search in lang_model data for creative context
-            if self._tokenizer and len(candidates) < max_contexts:
-                lang_contexts = self._search_lang_model_context(query, max_contexts - len(candidates))
-                candidates.extend(lang_contexts)
-            
-            # Sort by semantic score and take top ones
-            candidates.sort(key=lambda x: x['score'], reverse=True)
-            top_candidates = candidates[:max_contexts]
-            
-            # Cache the results
-            self._context_cache[cache_key] = top_candidates
-            
-            if top_candidates:
-                best_score = top_candidates[0]['score']
-                print(f"🔍 Semantic search: {len(top_candidates)} contexts, best score: {best_score:.3f}")
-            
-            return top_candidates
-            
-        except Exception as e:
-            print(f"❌ Error in smart context retrieval: {e}")
-            return []
-        finally:
-            self._close_mongo_connection(client)
+        contexts = []
+        
+        # Get contexts from main MongoDB
+        client = self._get_mongo_connection()
+        if client:
+            try:
+                db = client[self.config.DATABASE_NAME]
+                collection = db[self.config.COLLECTION_NAME]
+                
+                for doc in collection.find().limit(100):
+                    score = self._semantic_similarity(query, doc)
+                    if score > 0.05:
+                        contexts.append({
+                            'score': score,
+                            'input': doc.get('input', ''),
+                            'output': doc.get('output', ''),
+                            'thinking': doc.get('thinking', ''),
+                            'mood': doc.get('mood', 'neutral'),
+                            'similarity_type': 'semantic',
+                            'source': 'main_mongodb'
+                        })
+            except Exception as e:
+                print(f"❌ Error in main MongoDB context retrieval: {e}")
+            finally:
+                self._close_mongo_connection(client)
+        
+        # Get contexts from Math Training DB (especially for math queries)
+        if is_math_query:
+            maths_client = self._get_maths_mongo_connection()
+            if maths_client:
+                try:
+                    db = maths_client[self.config.MATHS_TRAINING_DB]
+                    collection = db[self.config.MATHS_TRAIN_COLLECTION]
+                    
+                    for doc in collection.find().limit(100):
+                        score = self._semantic_similarity(query, doc)
+                        if score > 0.1:  # Higher threshold for math contexts
+                            contexts.append({
+                                'score': score * 1.2,  # Boost math context scores for math queries
+                                'input': doc.get('input', ''),
+                                'output': doc.get('output', ''),
+                                'thinking': doc.get('thinking', ''),
+                                'mood': 'analytical',
+                                'similarity_type': 'math_semantic',
+                                'source': 'math_training'
+                            })
+                except Exception as e:
+                    print(f"❌ Error in math training context retrieval: {e}")
+                finally:
+                    self._close_maths_mongo_connection(maths_client)
+        
+        # Also search in lang_model data for creative context
+        if self._tokenizer and len(contexts) < max_contexts:
+            lang_contexts = self._search_lang_model_context(query, max_contexts - len(contexts))
+            contexts.extend(lang_contexts)
+        
+        # Sort by semantic score and take top ones
+        contexts.sort(key=lambda x: x['score'], reverse=True)
+        top_contexts = contexts[:max_contexts]
+        
+        # Cache the results
+        self._context_cache[cache_key] = top_contexts
+        
+        if top_contexts:
+            best_score = top_contexts[0]['score']
+            sources = set(ctx['source'] for ctx in top_contexts)
+            print(f"🔍 Semantic search: {len(top_contexts)} contexts, best score: {best_score:.3f}, sources: {sources}")
+        
+        return top_contexts
     
     def _search_lang_model_context(self, query: str, max_contexts: int) -> List[Dict]:
         """Search for relevant context in lang_model data"""
@@ -403,13 +552,14 @@ class DataLoader:
                     contexts.append({
                         'score': score * 0.5,  # Lower weight for lang_model contexts
                         'input': 'Creative writing request',
-                        'output': text[:200] + '...' if len(text) > 200 else text,  # Truncate long texts
+                        'output': text[:200] + '...' if len(text) > 200 else text,
                         'thinking': 'Providing creative writing context',
                         'mood': 'creative',
-                        'similarity_type': 'lang_model_semantic'
+                        'similarity_type': 'lang_model_semantic',
+                        'source': 'lang_model'
                     })
                 
-                if len(contexts) >= max_contexts * 2:  # Get extra for filtering
+                if len(contexts) >= max_contexts * 2:
                     break
             
             return contexts[:max_contexts]
@@ -426,7 +576,7 @@ class DataLoader:
         
         for batch in mixed_stream:
             sample_batch.extend(batch)
-            if len(sample_batch) >= 5000:  # Sample size
+            if len(sample_batch) >= 5000:
                 break
         
         data_size = len(sample_batch)
@@ -504,7 +654,8 @@ class DataLoader:
             "avg_thinking_length": round(avg_thinking_len, 1),
             "tokenizer_used": self._tokenizer is not None,
             "persistent_mongo": self.persistent_mongo,
-            "smart_context": True
+            "smart_context": True,
+            "math_training_available": self.config.MATHS_TRAINING_URL is not None
         }
     
     def close_persistent_connections(self):
@@ -513,6 +664,11 @@ class DataLoader:
             self._close_mongo_connection(self._mongo_client)
             self._mongo_client = None
             print("🔒 Persistent MongoDB connection closed")
+        
+        if self._maths_mongo_client:
+            self._close_maths_mongo_connection(self._maths_mongo_client)
+            self._maths_mongo_client = None
+            print("🔒 Persistent Math Training MongoDB connection closed")
     
     def __del__(self):
         """Destructor to ensure connections are closed"""

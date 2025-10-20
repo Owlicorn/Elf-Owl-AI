@@ -12,6 +12,11 @@ class Config:
     DATABASE_NAME = "elf_owl_db" 
     COLLECTION_NAME = "dataset"
     
+    # New Math Training Data Source
+    MATHS_TRAINING_URL = os.getenv("MATHS_TRAINING")
+    MATHS_TRAINING_DB = "dataset"
+    MATHS_TRAIN_COLLECTION = "NumCrunch"
+    
     # Auto-scaling parameters (will be set automatically)
     D_MODEL = None
     N_LAYERS = None  
@@ -34,11 +39,12 @@ class Config:
     TEMPERATURE = 0.7
     REPETITION_PENALTY = 1.5
     MAX_MONGO_EXAMPLES = 60000
+    MAX_MATHS_EXAMPLES = 60000  
     
     # Training monitoring
-    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?"]
+    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?", "Solve 2+2", "Calculate derivative of x^2"]  # Added math prompts
     
-    # Mood system
+    # Mood system - Added math-specific moods
     MOODS = [
     # Core moods
     "playful",      # 😄 Fun, humorous, lighthearted
@@ -66,7 +72,12 @@ class Config:
     "poetic",       # 📜 Lyrical, metaphorical, beautiful
     "confident",    # 💪 Assertive, self-assured, bold
     "humble",       # 🙏 Modest, self-effacing, gracious
-    "rebellious"    # ⚡ Challenging norms, unconventional
+    "rebellious",   # ⚡ Challenging norms, unconventional
+    
+    # Math-specific moods
+    "precise",      # 🎯 Exact, accurate, step-by-step
+    "logical",      # 🧩 Structured, reasoning-based
+    "educational"   # 📚 Teaching, explanatory
     ]
     
     MOOD_DESCRIPTIONS = {
@@ -93,7 +104,10 @@ class Config:
     "poetic": "Lyrical, metaphorical, and beautiful language",
     "confident": "Assertive, self-assured, and bold statements",
     "humble": "Modest, self-effacing, and gracious tone",
-    "rebellious": "Challenging norms and unconventional ideas"
+    "rebellious": "Challenging norms and unconventional ideas",
+    "precise": "Exact, accurate, and step-by-step explanations",
+    "logical": "Structured, reasoning-based problem solving",
+    "educational": "Teaching-oriented and explanatory approach"
     }
     
     # API Configuration
