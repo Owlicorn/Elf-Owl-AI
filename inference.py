@@ -5,6 +5,11 @@ import re
 import random
 import time
 from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
+import json
+import urllib.parse
+import os
 
 from data_loader import DataLoader
 from tokenizer import ElfOwlTokenizer
@@ -13,10 +18,12 @@ import config
 
 class ElfOwlInference:
     def __init__(self, model_path: str = None, tokenizer_path: str = None, 
-                 persistent_mongo: bool = True, use_smart_context: bool = True):
+                 persistent_mongo: bool = True, use_smart_context: bool = True,
+                 enable_web_search: bool = True):
         self.config = config.Config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.use_smart_context = use_smart_context
+        self.enable_web_search = enable_web_search
         self._default_mood = None
         
         # Initialize components
@@ -44,11 +51,31 @@ class ElfOwlInference:
         self.cache_hits = 0
         self.total_queries = 0
         
+        # Web search cache to avoid repeated searches
+        self.web_search_cache = {}
+        
+        # Fallback knowledge base for common questions
+        self.fallback_knowledge = {
+            "current pm of india": "Narendra Modi is the current Prime Minister of India. He has been serving since 2014.",
+            "population of india": "As of 2024, India's population is approximately 1.44 billion people, making it the most populous country in the world.",
+            "capital of india": "New Delhi is the capital of India.",
+            "current president of india": "Droupadi Murmu is the current President of India, serving since 2022.",
+            "current pm of usa": "Joe Biden is the current President of the United States.",
+            "current president of usa": "Joe Biden is the current President of the United States.",
+            "capital of usa": "Washington D.C. is the capital of the United States.",
+            "population of china": "China's population is approximately 1.425 billion people as of 2024.",
+            "current pm of uk": "Rishi Sunak is the current Prime Minister of the United Kingdom.",
+            "current pm of canada": "Justin Trudeau is the current Prime Minister of Canada."
+        }
+        
         print("🚀 Elf Owl AI Inference Engine Ready!")
         print(f"🔧 Device: {self.device}")
         print(f"🎯 Free Generation: {self.config.MIN_GENERATION_LENGTH} to {self.config.MAX_GENERATION_LENGTH} tokens")
         print(f"🧠 Smart Context: {use_smart_context}")
+        print(f"🔍 Web Search: {enable_web_search}")
         print(f"🔗 Persistent MongoDB: {persistent_mongo}")
+        print(f"🔢 Math Training Available: {self.config.MATHS_TRAINING_URL is not None}")
+        print(f"📚 Fallback Knowledge: {len(self.fallback_knowledge)} entries")
     
     def load_model(self, model_path: str = None) -> Optional[ElfOwlModel]:
         """Load trained model"""
@@ -86,42 +113,230 @@ class ElfOwlInference:
             print(f"❌ Error loading model: {e}")
             return None
     
+    def _clean_user_query(self, query: str) -> str:
+        """Clean and normalize user query"""
+        # Remove extra spaces and normalize
+        query = ' '.join(query.split())
+        
+        # Remove repeated phrases (handle spamming)
+        words = query.split()
+        if len(words) > 10:  # Likely spam/repeated
+            # Take first few unique words
+            unique_words = []
+            for word in words:
+                if word not in unique_words:
+                    unique_words.append(word)
+                if len(unique_words) >= 8:  # Reasonable query length
+                    break
+            query = ' '.join(unique_words)
+        
+        return query.lower().strip()
+    
+    def _get_fallback_answer(self, query: str) -> Optional[str]:
+        """Get answer from fallback knowledge base"""
+        clean_query = self._clean_user_query(query)
+        
+        # Exact match
+        if clean_query in self.fallback_knowledge:
+            return self.fallback_knowledge[clean_query]
+        
+        # Partial match
+        for key, value in self.fallback_knowledge.items():
+            if key in clean_query or clean_query in key:
+                return value
+        
+        return None
+    
+    def _is_gibberish_thinking(self, thinking: str) -> bool:
+        """Detect if the thinking process is gibberish/untrained output"""
+        if not thinking or len(thinking.strip()) < 10:
+            return True
+            
+        thinking_lower = thinking.lower()
+        
+        # Gibberish indicators
+        gibberish_indicators = [
+            "ouuuuu", "oooooh", "🦉", "💖", "✨", "his", "circuits", "digital",
+            "vast", "fledgling", "owlet", "hoot", "wisdom", "tweet", "chirp"
+        ]
+        
+        # Count gibberish indicators
+        gibberish_count = sum(1 for indicator in gibberish_indicators if indicator in thinking_lower)
+        
+        # If more than 2 gibberish indicators, likely untrained output
+        if gibberish_count >= 2:
+            return True
+        
+        # Check for very short or repetitive content
+        words = thinking.split()
+        if len(words) < 5:
+            return True
+            
+        # Check for reasonable sentence structure
+        if thinking_lower.count('.') == 0 and thinking_lower.count('?') == 0 and thinking_lower.count('!') == 0:
+            return True
+            
+        return False
+    
+    def _needs_web_search(self, query: str) -> bool:
+        """Determine if web search is needed based on query"""
+        query_lower = self._clean_user_query(query)
+        
+        # Check if we have a fallback answer first
+        if self._get_fallback_answer(query):
+            print("📚 Using fallback knowledge, skipping web search")
+            return False
+        
+        # Keywords that indicate need for current/recent information
+        search_keywords = [
+            'current', 'recent', 'latest', 'today', 'yesterday', 'this week', 'this month',
+            'new', 'update', 'breaking', 'news', '2024', '2025', 'now', 'live',
+            'what happened', 'when did', 'who is', 'where is', 'how to',
+            'population of', 'capital of', 'president of', 'prime minister of',
+            'weather', 'stock', 'crypto', 'sports', 'score'
+        ]
+        
+        # Check if query requires current information
+        if any(keyword in query_lower for keyword in search_keywords):
+            return True
+        
+        # Specific factual questions
+        specific_questions = [
+            'who is', 'what is', 'when did', 'where is', 'how many',
+            'how much', 'how old', 'how to'
+        ]
+        
+        if any(query_lower.startswith(phrase) for phrase in specific_questions):
+            return True
+            
+        return False
+    
+    def _search_web_simple(self, query: str, max_results: int = 3) -> List[Dict[str, str]]:
+        """Simple web search with fallback to knowledge base"""
+        if not self.enable_web_search:
+            return []
+        
+        # Check cache first
+        cache_key = hash(query.lower())
+        if cache_key in self.web_search_cache:
+            print("🔍 Using cached web search results")
+            return self.web_search_cache[cache_key]
+        
+        print(f"🌐 Searching web for: {query}")
+        
+        # First, check if we have a fallback answer
+        fallback_answer = self._get_fallback_answer(query)
+        if fallback_answer:
+            print("✅ Using fallback knowledge")
+            return [{
+                'source': 'Fallback Knowledge',
+                'content': fallback_answer,
+                'url': ''
+            }]
+        
+        # If no fallback, try web APIs
+        results = []
+        
+        try:
+            # Method 1: DuckDuckGo Instant Answer API
+            print("🦆 Trying DuckDuckGo API...")
+            ddg_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&skip_disambig=1"
+            response = requests.get(ddg_url, timeout=10, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Extract from Abstract
+                if data.get('Abstract') and data['Abstract']:
+                    results.append({
+                        'source': 'DuckDuckGo',
+                        'content': data['Abstract'],
+                        'url': data.get('AbstractURL', '')
+                    })
+                    print("✅ Found DuckDuckGo abstract")
+            
+            # If still no results, return empty and rely on fallback later
+            if not results:
+                print("❌ No web results found, will use fallback")
+            
+            # Cache the results (even if empty)
+            results = results[:max_results]
+            self.web_search_cache[cache_key] = results
+            
+            return results
+            
+        except Exception as e:
+            print(f"❌ Web search error: {e}")
+            return []
+    
+    def _extract_relevant_info(self, web_results: List[Dict], query: str) -> str:
+        """Extract and summarize relevant information from web results"""
+        if not web_results:
+            # Try fallback knowledge as last resort
+            fallback = self._get_fallback_answer(query)
+            if fallback:
+                return f"Fallback Knowledge: {fallback}"
+            return ""
+        
+        relevant_info = []
+        
+        for result in web_results:
+            content = result.get('content', '')
+            source = result.get('source', 'Unknown')
+            
+            if content:
+                # Truncate long content
+                truncated_content = content[:200] + "..." if len(content) > 200 else content
+                relevant_info.append(f"{source}: {truncated_content}")
+        
+        # Combine all relevant information
+        if relevant_info:
+            combined_info = " | ".join(relevant_info)
+            print(f"📄 Extracted {len(relevant_info)} relevant snippets")
+            return combined_info
+        else:
+            return ""
+    
     def get_smart_context(self, query: str, conversation_history: List[Dict] = None) -> str:
-        """Get context using semantic search from both MongoDB and lang_model"""
+        """Get context using semantic search from all sources"""
         if not self.use_smart_context:
             return self.get_basic_context(query, conversation_history)
         
         try:
-            # Get semantically relevant contexts
+            # Get semantically relevant contexts from ALL sources
             relevant_contexts = self.data_loader.get_smart_factual_context(query)
             
-            if not relevant_contexts:
-                return ""
-            
-            # Build context string from multiple sources
             context_parts = []
+            
+            # Add database contexts
             for ctx in relevant_contexts:
-                # Include similarity score for debugging (optional)
-                score_info = f"[score:{ctx['score']:.2f}]" if ctx.get('score') else ""
+                source_info = f"[{ctx.get('source', 'unknown')}]"
                 
                 if ctx.get('similarity_type') == 'lang_model_semantic':
-                    context_parts.append(f"Creative: {ctx['output']} {score_info}")
+                    context_parts.append(f"Creative {source_info}: {ctx['output']}")
+                elif ctx.get('source') == 'math_training':
+                    context_parts.append(f"Math {source_info}: {ctx['input']} -> {ctx['output']}")
                 else:
-                    context_parts.append(f"Factual: {ctx['input']} -> {ctx['output']} {score_info}")
+                    context_parts.append(f"Factual {source_info}: {ctx['input']} -> {ctx['output']}")
             
-            context = " | ".join(context_parts)
+            # Combine database contexts
+            database_context = " | ".join(context_parts) if context_parts else ""
             
-            best_score = relevant_contexts[0].get('score', 0) if relevant_contexts else 0
-            print(f"🧠 Smart context: {len(relevant_contexts)} sources, best: {best_score:.3f}")
+            if relevant_contexts:
+                best_score = relevant_contexts[0].get('score', 0)
+                sources = set(ctx.get('source', 'unknown') for ctx in relevant_contexts)
+                print(f"🧠 Smart context: {len(relevant_contexts)} sources from {sources}, best: {best_score:.3f}")
             
-            return context
+            return database_context
             
         except Exception as e:
             print(f"⚠️ Smart context error: {e}, falling back to basic context")
             return self.get_basic_context(query, conversation_history)
     
     def get_basic_context(self, query: str, conversation_history: List[Dict] = None) -> str:
-        """Fallback context retrieval using basic keyword matching"""
+        """Fallback context retrieval"""
         context_parts = []
         
         # Add conversation history context
@@ -134,14 +349,6 @@ class ElfOwlInference:
                     if user_msg and assistant_msg:
                         context_parts.append(f"Previous: {user_msg} -> {assistant_msg}")
         
-        # Add basic factual context
-        try:
-            basic_contexts = self.data_loader.get_factual_context_for_inference(query)
-            for ctx in basic_contexts[:2]:
-                context_parts.append(f"Factual: {ctx['input']} -> {ctx['output']}")
-        except Exception as e:
-            print(f"⚠️ Basic context error: {e}")
-        
         context = " | ".join(context_parts) if context_parts else ""
         
         if context:
@@ -151,50 +358,72 @@ class ElfOwlInference:
     
     def _get_cached_response(self, query: str, context: str) -> Optional[Dict[str, Any]]:
         """Check cache for similar queries"""
-        self.total_queries += 1
+        clean_query = self._clean_user_query(query)
+        cache_key = hash(f"{clean_query}:{context}")
         
-        # Simple cache key based on query and context
-        cache_key = hash(f"{query.lower().strip()}:{context.lower().strip()}")
-        
-        # Check cache (valid for 5 minutes)
         if cache_key in self.response_cache:
             cached_time, response = self.response_cache[cache_key]
             if time.time() - cached_time < 300:  # 5 minutes
                 self.cache_hits += 1
-                print(f"💾 Cache hit: {self.cache_hits}/{self.total_queries} "
-                      f"({self.cache_hits/self.total_queries*100:.1f}%)")
+                self.total_queries += 1
+                print(f"💾 Cache hit: {self.cache_hits}/{self.total_queries} ({self.cache_hits/self.total_queries*100:.1f}%)")
                 return response
         
+        self.total_queries += 1
         return None
     
     def _cache_response(self, query: str, context: str, response: Dict[str, Any]):
         """Cache response for similar future queries"""
-        cache_key = hash(f"{query.lower().strip()}:{context.lower().strip()}")
+        clean_query = self._clean_user_query(query)
+        cache_key = hash(f"{clean_query}:{context}")
         self.response_cache[cache_key] = (time.time(), response)
         
-        # Limit cache size
         if len(self.response_cache) > 1000:
-            # Remove oldest entries
             oldest_keys = sorted(self.response_cache.keys(), 
                                key=lambda k: self.response_cache[k][0])[:100]
             for key in oldest_keys:
                 del self.response_cache[key]
+    
+    def _generate_safe_response(self, query: str, mood: str) -> Dict[str, Any]:
+        """Generate a safe response when model produces gibberish"""
+        clean_query = self._clean_user_query(query)
+        
+        # Try to get factual answer first
+        factual_answer = self._get_fallback_answer(query)
+        if factual_answer:
+            thinking = f"I recall that {factual_answer}"
+            response = f"Based on available knowledge: {factual_answer}"
+        else:
+            # Generic friendly response
+            thinking = "I'm still learning about this topic, but I want to be helpful"
+            response = f"I'm sorry, I don't have specific information about '{clean_query}' right now. I'm constantly learning and improving! 🦉"
+        
+        return {
+            "response": response,
+            "thinking": thinking,
+            "mood": mood,
+            "mood_source": "fallback",
+            "context_used": False,
+            "web_search_used": False,
+            "tokens_generated": len(response.split()),
+            "response_time": 0.1,
+            "timestamp": datetime.now().isoformat(),
+            "cached": False,
+            "fallback_used": True
+        }
     
     def generate_response(self, prompt: str, conversation_history: List[Dict] = None, 
                          max_length: int = None, temperature: float = None, 
                          top_k: int = None, top_p: float = None,
                          use_cache: bool = True, 
                          forced_mood: str = None) -> Dict[str, Any]:
-        """Generate response with SEPARATE thinking and output generation"""
+        """Generate response with comprehensive fallback system"""
         if not self.model:
-            return {
-                "response": "Model not loaded. Please check if the model file exists.",
-                "thinking": "System error: Model not available",
-                "mood": "neutral",
-                "context_used": False,
-                "tokens_generated": 0,
-                "error": "model_not_loaded"
-            }
+            return self._generate_safe_response(prompt, "neutral")
+        
+        # Clean the prompt first
+        original_prompt = prompt
+        prompt = self._clean_user_query(original_prompt)
         
         # Use config defaults if not provided
         if max_length is None:
@@ -208,14 +437,13 @@ class ElfOwlInference:
         
         start_time = time.time()
         
-        # Get context (smart or basic)
+        # Get context from ALL sources
         context = self.get_smart_context(prompt, conversation_history)
         
         # Check cache
         if use_cache:
             cached_response = self._get_cached_response(prompt, context)
             if cached_response:
-                cached_response['cached'] = True
                 cached_response['response_time'] = time.time() - start_time
                 return cached_response
         
@@ -233,15 +461,26 @@ class ElfOwlInference:
             mood_source = "auto_detected"
             print(f"🎭 Auto-detected mood: {mood}")
 
-        # **STEP 1: GENERATE THINKING SEPARATELY**
+        # STEP 1: CHECK IF WEB SEARCH IS NEEDED
+        web_context = ""
+        should_search = self._needs_web_search(prompt)
+        
+        if self.enable_web_search and should_search:
+            print("🔍 Web search triggered based on query")
+            web_results = self._search_web_simple(prompt)
+            web_context = self._extract_relevant_info(web_results, prompt)
+        
+        # STEP 2: GENERATE THINKING WITH WEB CONTEXT IF AVAILABLE
         thinking_prompt_parts = []
         if context:
             thinking_prompt_parts.append(f"Context: {context}")
+        if web_context:
+            thinking_prompt_parts.append(f"Web Context: {web_context}")
         thinking_prompt_parts.append(f"Input: {prompt}")
         
         thinking_prompt = " [SEP] ".join(thinking_prompt_parts) + " [SEP] Thinking:"
         
-        # Generate thinking - STOP at [SEP]
+        # Generate thinking
         thinking = self._generate_text(
             thinking_prompt, 
             max_length=100, 
@@ -251,7 +490,15 @@ class ElfOwlInference:
         thinking = self._clean_response(thinking)
         print(f"🤔 Thinking: {thinking}")
 
-        # **STEP 2: GENERATE OUTPUT SEPARATELY**  
+        # STEP 3: CHECK IF THINKING IS GIBBERISH
+        if self._is_gibberish_thinking(thinking):
+            print("⚠️ Thinking is gibberish, using fallback response")
+            safe_response = self._generate_safe_response(prompt, mood)
+            safe_response['response_time'] = time.time() - start_time
+            # Don't cache gibberish responses
+            return safe_response
+
+        # STEP 4: GENERATE FINAL OUTPUT
         output_prompt_parts = thinking_prompt_parts.copy()
         output_prompt_parts.extend([
             f"Thinking: {thinking}",
@@ -261,7 +508,7 @@ class ElfOwlInference:
         
         output_prompt = " [SEP] ".join(output_prompt_parts)
         
-        # Generate output - STOP at [EOS]
+        # Generate output
         response = self._generate_text(
             output_prompt, 
             max_length=max_length, 
@@ -271,6 +518,14 @@ class ElfOwlInference:
             stop_tokens=["[EOS]"]
         )
         response = self._clean_response(response)
+        
+        # Check if response is also gibberish
+        if not response or len(response.strip()) < 5:
+            print("⚠️ Response is empty/gibberish, using fallback")
+            safe_response = self._generate_safe_response(prompt, mood)
+            safe_response['response_time'] = time.time() - start_time
+            return safe_response
+        
         print(f"💭 Response: {response}")
 
         # Build result
@@ -280,14 +535,16 @@ class ElfOwlInference:
             "mood": mood,
             "mood_source": mood_source,
             "context_used": bool(context),
+            "web_search_used": bool(web_context),
             "tokens_generated": len(self.tokenizer.encode(response)),
             "response_time": time.time() - start_time,
             "timestamp": datetime.now().isoformat(),
-            "cached": False
+            "cached": False,
+            "fallback_used": False
         }
         
-        # Cache the response
-        if use_cache and result['tokens_generated'] > 0:
+        # Only cache good responses
+        if result['tokens_generated'] > 5 and not self._is_gibberish_thinking(response):
             self._cache_response(prompt, context, result)
         
         print(f"✅ Generated {result['tokens_generated']} tokens in {result['response_time']:.2f}s")
@@ -297,7 +554,7 @@ class ElfOwlInference:
     def _generate_text(self, prompt: str, max_length: int = 100, 
                       temperature: float = 0.7, top_k: int = None, top_p: float = None,
                       stop_tokens: List[str] = None) -> str:
-        """Generate text with proper stop token handling - FIXED VERSION"""
+        """Generate text with proper stop token handling"""
         if top_k is None:
             top_k = self.config.TOP_K
         if top_p is None:
@@ -307,20 +564,17 @@ class ElfOwlInference:
         
         input_ids = self.tokenizer.encode(prompt)
         
-        # Handle very long prompts
         max_input_length = self.config.MAX_SEQUENCE_LENGTH - max_length - 10
         if len(input_ids) > max_input_length:
             input_ids = input_ids[-max_input_length:]
         
         input_tensor = torch.tensor([input_ids]).to(self.device)
         
-        # Convert stop tokens to IDs
         stop_token_ids = []
         for token in stop_tokens:
             if token in self.special_tokens:
                 stop_token_ids.append(self.special_tokens[token])
         
-        # Use model's generate method - REMOVED pad_token_id
         with torch.no_grad():
             generated_ids = self.model.generate(
                 input_tensor,
@@ -329,14 +583,11 @@ class ElfOwlInference:
                 top_k=top_k,
                 top_p=top_p,
                 eos_token_id=self.special_tokens.get("[EOS]"),
-                # pad_token_id=self.special_tokens.get("[PAD]"),  # REMOVED - not supported
                 repetition_penalty=self.config.REPETITION_PENALTY
             )
         
-        # Extract generated tokens (excluding input)
         generated_tokens = generated_ids[0].cpu().tolist()[len(input_ids):]
         
-        # Stop at stop tokens
         for stop_id in stop_token_ids:
             if stop_id in generated_tokens:
                 stop_idx = generated_tokens.index(stop_id)
@@ -346,70 +597,41 @@ class ElfOwlInference:
         return self.tokenizer.decode(generated_tokens)
     
     def _select_mood(self, prompt: str) -> str:
-        """Select appropriate mood based on query with enhanced detection"""
+        """Select appropriate mood based on query"""
         prompt_lower = prompt.lower()
         
-        # Mood detection with priority
         mood_rules = [
+            (['calculate', 'solve', 'math', 'equation', 'formula'], "analytical"),
             (['joke', 'funny', 'laugh', 'haha', 'lol'], "playful"),
             (['sad', 'depressed', 'unhappy', 'cry', 'hurt'], "empathetic"),
-            (['angry', 'mad', 'hate', 'annoyed', 'frustrated'], "calm"),
-            (['love', 'romantic', 'heart', 'crush'], "romantic"),
-            (['story', 'creative', 'imagine', 'write', 'poem'], "creative"),
-            (['why', 'how', 'explain', 'what is', 'tell me about'], "analytical"),
-            (['help', 'problem', 'issue', 'trouble', 'support'], "helpful"),
-            (['?', 'who', 'when', 'where', 'which'], "curious"),
-            (['thank', 'thanks', 'appreciate'], "grateful"),
-            (['sorry', 'apologize', 'forgive'], "forgiving"),
-            (['stupid', 'dumb', 'idiot', 'useless'], "patient"),
+            (['angry', 'mad', 'hate', 'annoyed'], "calm"),
+            (['love', 'romantic', 'heart'], "romantic"),
+            (['story', 'creative', 'imagine', 'write'], "creative"),
+            (['why', 'how', 'explain', 'what is'], "analytical"),
+            (['help', 'problem', 'issue', 'trouble'], "helpful"),
+            (['?', 'who', 'when', 'where'], "curious"),
+            (['thank', 'thanks'], "grateful"),
         ]
         
         for keywords, mood in mood_rules:
             if any(keyword in prompt_lower for keyword in keywords):
                 return mood
         
-        # Default based on query characteristics
-        if len(prompt.split()) > 20:
-            return "wise"
-        elif len(prompt.split()) < 3:
-            return "friendly"
-        else:
-            return random.choice(self.config.MOODS)
+        return random.choice(["friendly", "curious", "helpful"])
     
     def _clean_response(self, response: str) -> str:
-        """Clean and format response with enhanced cleaning"""
+        """Clean and format response"""
         if not response:
             return ""
         
-        # Remove special tokens
         for token in self.special_tokens:
             response = response.replace(token, '')
         
-        # Remove any remaining [SEP] markers and other artifacts
         response = re.sub(r'\[SEP\]', '', response)
         response = re.sub(r'\s+', ' ', response).strip()
         
-        # Fix common issues
-        response = re.sub(r'\s+([.,!?;])', r'\1', response)
-        response = re.sub(r'(\w)\s+\.', r'\1.', response)
-        
-        # Ensure proper sentence casing
         if response:
             response = response[0].upper() + response[1:]
-        
-        # Ensure proper ending
-        if response and response[-1] not in ['.', '!', '?', '"', "'", ':']:
-            if any(marker in response.lower() for marker in ['question', 'what', 'why', 'how']):
-                response += '?'
-            elif any(marker in response.lower() for marker in ['great', 'wonderful', 'excellent']):
-                response += '!'
-            else:
-                response += '.'
-        
-        # Fix common grammatical issues
-        response = re.sub(r'\bi\b', 'I', response)
-        response = re.sub(r'\bim\b', "I'm", response)
-        response = re.sub(r'\bive\b', "I've", response)
         
         return response
     
@@ -424,32 +646,7 @@ class ElfOwlInference:
     
     def get_available_moods(self) -> Dict[str, str]:
         """Get all available moods with descriptions"""
-        return {
-            "playful": "Fun, humorous, and lighthearted responses",
-            "curious": "Asking questions and exploring ideas", 
-            "analytical": "Logical, detailed, and methodical thinking",
-            "empathetic": "Caring, understanding, and supportive tone",
-            "creative": "Imaginative, artistic, and story-telling",
-            "sarcastic": "Witty, ironic, and lightly teasing",
-            "wise": "Knowledgeable and philosophical perspective",
-            "formal": "Professional and structured communication",
-            "enthusiastic": "Excited, energetic, and positive vibes",
-            "calm": "Peaceful, soothing, and reassuring tone",
-            "mysterious": "Cryptic, intriguing, and enigmatic style",
-            "dramatic": "Theatrical, exaggerated, and suspenseful",
-            "friendly": "Warm, welcoming, and approachable manner",
-            "professional": "Business-like and expert communication", 
-            "romantic": "Passionate, affectionate, and poetic language",
-            "adventurous": "Bold, exploratory, and daring attitude",
-            "humorous": "Funny, joke-telling, and entertaining",
-            "serious": "Focused, no-nonsense, and direct approach",
-            "whimsical": "Fanciful, dreamy, and magical thinking",
-            "scientific": "Fact-based and evidence-driven responses",
-            "poetic": "Lyrical, metaphorical, and beautiful language",
-            "confident": "Assertive, self-assured, and bold statements",
-            "humble": "Modest, self-effacing, and gracious tone",
-            "rebellious": "Challenging norms and unconventional ideas"
-        }
+        return self.config.MOOD_DESCRIPTIONS
     
     def set_default_mood(self, mood: str) -> bool:
         """Set a default mood for all responses"""
@@ -468,18 +665,23 @@ class ElfOwlInference:
             "total_queries": self.total_queries,
             "cache_hit_rate": self.cache_hits / self.total_queries if self.total_queries > 0 else 0,
             "cache_size": len(self.response_cache),
+            "web_search_cache_size": len(self.web_search_cache),
             "smart_context_enabled": self.use_smart_context,
+            "web_search_enabled": self.enable_web_search,
             "model_loaded": self.model is not None,
             "device": str(self.device),
-            "default_mood": self._default_mood
+            "default_mood": self._default_mood,
+            "math_training_available": self.config.MATHS_TRAINING_URL is not None,
+            "fallback_knowledge_size": len(self.fallback_knowledge)
         }
     
     def clear_cache(self):
         """Clear response cache"""
         self.response_cache.clear()
+        self.web_search_cache.clear()
         self.cache_hits = 0
         self.total_queries = 0
-        print("🧹 Response cache cleared")
+        print("🧹 Response and web search caches cleared")
     
     def cleanup(self):
         """Cleanup resources"""

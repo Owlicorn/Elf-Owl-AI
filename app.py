@@ -8,7 +8,7 @@ import config
 # !pip install torch numpy tqdm pymongo tokenizers flask python-dotenv google-generativeai 
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'elf-owl-secret-key-2024')
+app.secret_key = os.getenv('SECRET_KEY', 'elf-owl-secret-key-2026')
 app.config['SESSION_TYPE'] = 'filesystem'
 
 # Initialize Elf Owl AI
