@@ -556,7 +556,7 @@ class DataLoader:
         
         for batch in mixed_stream:
             sample_batch.extend(batch)
-            if len(sample_batch) >= 5000:
+            if len(sample_batch) >= 8000:
                 break
         
         data_size = len(sample_batch)
