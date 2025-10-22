@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # Data sources
-    LANG_MODEL_PATH = "data/lang_model.txt"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    LANG_MODEL_PATH = os.path.join(BASE_DIR, "data", "lang_model.txt")
     MONGODB_URL = os.getenv("MONGODB_URL")
     DATABASE_NAME = "elf_owl_db" 
     COLLECTION_NAME = "dataset"
@@ -18,10 +18,10 @@ class Config:
     MATHS_TRAIN_COLLECTION = "NumCrunch"
     
     # Auto-scaling parameters (will be set automatically)
-    D_MODEL = None
-    N_LAYERS = None  
-    N_HEADS = None
-    D_FF = None
+    D_MODEL = 256  # Set a reasonable default
+    N_LAYERS = 6  
+    N_HEADS = 8
+    D_FF = 1024
     VOCAB_SIZE = 50000
     
     # Fixed parameters
@@ -38,11 +38,11 @@ class Config:
     TOP_P = 0.85
     TEMPERATURE = 0.7
     REPETITION_PENALTY = 1.5
-    MAX_MONGO_EXAMPLES = 60000
-    MAX_MATHS_EXAMPLES = 60000  
+    MAX_MONGO_EXAMPLES = 100000
+    MAX_MATHS_EXAMPLES = 100000  
     
     # Training monitoring
-    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?", "Solve 2+2", "Calculate derivative of x^2"]  # Added math prompts
+    SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?", "Solve 2+2", "Calculate derivative of x^2"]
     
     # Mood system - Added math-specific moods
     MOODS = [

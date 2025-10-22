@@ -27,7 +27,7 @@ class ElfOwlTokenizer:
         self.tokenizer.pre_tokenizer = Whitespace()
         
         # Get training data for tokenizer
-        training_pairs = data_loader.get_training_pairs(max_examples=8000)
+        training_pairs = data_loader.get_training_pairs(max_examples=5000)
         
         # Prepare text for tokenizer training
         texts = []

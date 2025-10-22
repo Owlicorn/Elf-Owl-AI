@@ -141,29 +141,53 @@ class ElfOwlTrainer:
         }
     
     def prepare_training(self):
-        """Prepare everything for training"""
+        """Prepare everything for training - IMPROVED VERSION"""
         print("🔄 Preparing training...")
         
-        # Load data for analysis
-        print("📚 Loading training data for analysis...")
-        # Load ALL training pairs for analysis (no 5k cap). If you want to limit memory,
-        # pass a max_examples value when calling prepare_training or adjust config.MAX_MONGO_EXAMPLES.
-        training_pairs = self.data_loader.get_training_pairs(max_examples=None)
-        data_size = len(training_pairs)
+        # First, validate data sources
+        self.validate_data_sources()
         
+        # Load data for analysis with better error handling
+        print("📚 Loading training data for analysis...")
+        try:
+            training_pairs = self.data_loader.get_training_pairs(max_examples=10000)  # Limit for analysis
+            data_size = len(training_pairs)
+            
+            if data_size == 0:
+                print("❌ No training data found! Check your data sources.")
+                return {"error": "No training data"}
+                
+            print(f"📊 Successfully loaded {data_size} examples for analysis")
+            
+        except Exception as e:
+            print(f"❌ Error loading training data: {e}")
+            # Try to continue with minimal data
+            training_pairs = []
+            data_size = 0
+
         # Calculate unique tokens
         unique_words = set()
         for pair in training_pairs:
-            unique_words.update(pair['input'].split())
-            unique_words.update(pair['output'].split())
-            if pair.get('thinking'):
-                unique_words.update(pair['thinking'].split())
+            try:
+                unique_words.update(str(pair['input']).split())
+                unique_words.update(str(pair['output']).split())
+                if pair.get('thinking'):
+                    unique_words.update(str(pair['thinking']).split())
+            except Exception as e:
+                print(f"⚠️ Error processing pair: {e}")
+                continue
         
         unique_token_count = len(unique_words)
         print(f"📊 Data analysis: {data_size} examples, {unique_token_count} unique words")
         
-        # Auto-scale
+        # Auto-scale with minimum guarantees
         self.config.auto_scale(data_size, unique_token_count)
+        
+        # Ensure minimum model size for your data
+        if data_size > 50000:
+            self.config.D_MODEL = max(self.config.D_MODEL, 512)
+            self.config.N_LAYERS = max(self.config.N_LAYERS, 8)
+            print(f"🔧 Boosted model size for large dataset: d_model={self.config.D_MODEL}")
         
         # Train tokenizer
         print("🔄 Training tokenizer...")
@@ -172,9 +196,18 @@ class ElfOwlTrainer:
         # Set tokenizer for data_loader
         self.data_loader.set_tokenizer(self.tokenizer)
         
-        # Create dataset
+        # Create dataset with validation
         print("📚 Creating dataset...")
+        if not training_pairs:
+            print("❌ No training pairs available!")
+            return {"error": "No training pairs"}
+            
         dataset = ElfOwlDataset(training_pairs, self.tokenizer, self.config.MAX_SEQUENCE_LENGTH)
+        
+        if len(dataset) == 0:
+            print("❌ Dataset is empty!")
+            return {"error": "Empty dataset"}
+        
         self.dataloader = DataLoader(
             dataset, 
             batch_size=self.config.BATCH_SIZE, 
@@ -189,6 +222,10 @@ class ElfOwlTrainer:
         total_params = sum(p.numel() for p in self.model.parameters())
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"📊 Model parameters: {total_params:,} total, {trainable_params:,} trainable")
+        
+        # Model size estimation
+        param_size = total_params * 4 / (1024 * 1024)  # MB
+        print(f"💾 Estimated model size: {param_size:.1f}MB")
         
         # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
@@ -211,8 +248,26 @@ class ElfOwlTrainer:
             "data_size": data_size,
             "unique_tokens": unique_token_count,
             "training_examples": len(training_pairs),
-            "model_parameters": total_params
+            "model_parameters": total_params,
+            "estimated_size_mb": param_size
         }
+
+    def validate_data_sources(self):
+        """Validate all data sources before training"""
+        print("🔍 Validating data sources...")
+        
+        # Test MongoDB connections
+        try:
+            mongo_pairs = list(self.data_loader.load_mongodb_conversations(limit=10))
+            print(f"✅ Main MongoDB: {len(mongo_pairs)} sample documents")
+        except Exception as e:
+            print(f"❌ Main MongoDB failed: {e}")
+        
+        try:
+            math_pairs = list(self.data_loader.load_maths_training_data(limit=10))
+            print(f"✅ Math Training: {len(math_pairs)} sample documents")
+        except Exception as e:
+            print(f"❌ Math Training failed: {e}")
     
     def create_dataloader(self):
         """Create appropriate dataloader based on streaming preference"""

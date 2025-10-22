@@ -163,21 +163,26 @@ class DataLoader:
         common_words = query_words.intersection(doc_words)
         return len(common_words) / len(query_words)
     
+    # In data_loader.py - Fix the buffer filling methods
     def _fill_buffers(self, target_size: int = 500):
-        """Fill all three buffers for mixed streaming"""
+        """Fill all three buffers for mixed streaming - FIXED VERSION"""
         # Fill lang_model buffer
         if len(self._lang_model_buffer) < target_size:
             try:
-                lang_stream = self.load_lang_model_data(max_lines=target_size)
-                for text in lang_stream:
-                    self._lang_model_buffer.append({
-                        "input": "Write a creative piece of text",
-                        "thinking": "I should generate creative text with good grammar and flow",
-                        "output": text,
-                        "mood": random.choice(["creative", "playful", "wise", "descriptive"]),
-                        "context_used": [],
-                        "source": "lang_model"
-                    })
+                if os.path.exists(self.config.LANG_MODEL_PATH):
+                    lang_stream = self.load_lang_model_data(max_lines=target_size)
+                    for text in lang_stream:
+                        if text and len(text.strip()) > 10:  # Validate text
+                            self._lang_model_buffer.append({
+                                "input": "Write a creative piece of text",
+                                "thinking": "I should generate creative text with good grammar and flow",
+                                "output": text.strip(),
+                                "mood": random.choice(["creative", "playful", "wise", "descriptive"]),
+                                "context_used": [],
+                                "source": "lang_model"
+                            })
+                else:
+                    print(f"⚠️ Lang model file not found: {self.config.LANG_MODEL_PATH}")
             except Exception as e:
                 print(f"⚠️ Error filling lang_model buffer: {e}")
 
@@ -188,12 +193,20 @@ class DataLoader:
                 for conv in mongo_stream:
                     input_text = conv.get('input') or conv.get('user_input') or conv.get('question', '')
                     output_text = conv.get('output') or conv.get('assistant_response') or conv.get('answer', '')
+                    
+                    # PROPER TYPE VALIDATION AND CONVERSION
+                    input_text = str(input_text).strip() if input_text is not None else ""
+                    output_text = str(output_text).strip() if output_text is not None else ""
+                    thinking_text = str(conv.get('thinking', '')).strip() if conv.get('thinking') is not None else "Analyzing the user query and formulating a helpful response"
 
-                    if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
+                    if (input_text and output_text and 
+                        len(input_text) > 2 and len(output_text) > 2 and
+                        len(input_text) < 1000 and len(output_text) < 1000):  # Reasonable length checks
+                        
                         self._mongo_buffer.append({
-                            "input": input_text.strip(),
-                            "thinking": conv.get('thinking', 'Analyzing the user query and formulating a helpful response').strip(),
-                            "output": output_text.strip(),
+                            "input": input_text,
+                            "thinking": thinking_text,
+                            "output": output_text,
                             "mood": conv.get('mood', random.choice(self.config.MOODS)),
                             "context_used": conv.get('context_used', []),
                             "source": "mongodb"
@@ -201,24 +214,14 @@ class DataLoader:
             except Exception as e:
                 print(f"⚠️ Error filling MongoDB buffer: {e}")
 
-        # Fill Math Training buffer
+        # Fill Math Training buffer - FIXED TYPE ISSUES
         if len(self._maths_buffer) < target_size:
             try:
                 maths_stream = self.load_maths_training_data(limit=target_size)
                 for math_example in maths_stream:
-                    input_text = math_example.get('input', '')
-                    output_text = math_example.get('output', '')
-                    thinking_text = math_example.get('thinking', 'Solving the mathematical problem step by step with clear reasoning')
-
-                    if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
-                        self._maths_buffer.append({
-                            "input": input_text.strip(),
-                            "thinking": thinking_text.strip(),
-                            "output": output_text.strip(),
-                            "mood": random.choice(["analytical", "precise", "logical", "educational"]),
-                            "context_used": [],
-                            "source": "math_training"
-                        })
+                    processed = self._safe_math_data_processing(math_example)
+                    if processed:
+                        self._maths_buffer.append(processed)
             except Exception as e:
                 print(f"⚠️ Error filling Math Training buffer: {e}")
 
@@ -368,20 +371,13 @@ class DataLoader:
         try:
             maths_data = list(self.load_maths_training_data(limit=None))
             print(f"🔢 Loaded {len(maths_data)} examples from Math Training DB")
+            valid_math_count = 0
             for math_example in maths_data:
-                input_text = math_example.get('input', '')
-                output_text = math_example.get('output', '')
-                thinking_text = math_example.get('thinking', 'Solving the mathematical problem step by step with clear reasoning')
-
-                if input_text and output_text and len(input_text.strip()) > 2 and len(output_text.strip()) > 2:
-                    training_data.append({
-                        "input": input_text.strip(),
-                        "thinking": thinking_text.strip(),
-                        "output": output_text.strip(),
-                        "mood": random.choice(["analytical", "precise", "logical", "educational"]),
-                        "context_used": [],
-                        "source": "math_training"
-                    })
+                processed = self._safe_math_data_processing(math_example)
+                if processed:
+                    training_data.append(processed)
+                    valid_math_count += 1
+            print(f"✅ Successfully processed {valid_math_count} math examples")
         except Exception as e:
             print(f"⚠️ Error loading Math Training data: {e}")
 
@@ -556,7 +552,7 @@ class DataLoader:
         
         for batch in mixed_stream:
             sample_batch.extend(batch)
-            if len(sample_batch) >= 8000:
+            if len(sample_batch) >= 5000:
                 break
         
         data_size = len(sample_batch)
@@ -650,6 +646,45 @@ class DataLoader:
             self._maths_mongo_client = None
             print("🔒 Persistent Math Training MongoDB connection closed")
     
+    def _safe_math_data_processing(self, math_example):
+        """Safely process math data with type handling"""
+        try:
+            # Safely extract and convert fields
+            input_raw = math_example.get('input', '')
+            output_raw = math_example.get('output', '') 
+            thinking_raw = math_example.get('thinking', '')
+            
+            # Convert to string safely
+            input_text = str(input_raw) if input_raw is not None else ""
+            output_text = str(output_raw) if output_raw is not None else ""
+            thinking_text = str(thinking_raw) if thinking_raw is not None else "Solving the mathematical problem step by step"
+            
+            # Clean and validate
+            input_text = input_text.strip()
+            output_text = output_text.strip()
+            thinking_text = thinking_text.strip()
+            
+            # Validate content
+            if (len(input_text) > 2 and len(output_text) > 1 and
+                any(math_keyword in input_text.lower() for math_keyword in 
+                    ['calculate', 'solve', 'math', 'equation', '=', '+', '-', '*', '/', 'x', 'y'])):
+                
+                return {
+                    "input": input_text,
+                    "thinking": thinking_text,
+                    "output": output_text,
+                    "mood": random.choice(["analytical", "precise", "logical", "educational"]),
+                    "context_used": [],
+                    "source": "math_training"
+                }
+        
+        except Exception as e:
+            print(f"⚠️ Error processing math example: {e}")
+            if 'input' in math_example:
+                print(f"   Problem input: {math_example['input']}")
+        
+        return None
+
     def __del__(self):
         """Destructor to ensure connections are closed"""
         self.close_persistent_connections()
