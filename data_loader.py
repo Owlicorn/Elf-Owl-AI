@@ -31,6 +31,50 @@ class DataLoader:
         if persistent_mongo:
             self._get_mongo_connection()
             self._get_maths_mongo_connection()
+
+    def get_total_data_size_estimate(self) -> int:
+        """Get estimated total data size from all sources"""
+        print("🔍 Estimating total data size...")
+        total = 0
+        
+        # Count lang_model lines
+        try:
+            if os.path.exists(self.config.LANG_MODEL_PATH):
+                with open(self.config.LANG_MODEL_PATH, 'r', encoding='utf-8') as f:
+                    lang_count = sum(1 for line in f if line.strip())
+                total += lang_count
+                print(f"   📄 lang_model.txt: {lang_count} lines")
+        except Exception as e:
+            print(f"   ⚠️ Error counting lang_model: {e}")
+        
+        # Count MongoDB documents
+        try:
+            client = self._get_mongo_connection()
+            if client:
+                db = client[self.config.DATABASE_NAME]
+                collection = db[self.config.COLLECTION_NAME]
+                mongo_count = collection.count_documents({})
+                total += mongo_count
+                print(f"   🗄️ Main MongoDB: {mongo_count} documents")
+                self._close_mongo_connection(client)
+        except Exception as e:
+            print(f"   ⚠️ Error counting MongoDB: {e}")
+        
+        # Count Math Training documents
+        try:
+            maths_client = self._get_maths_mongo_connection()
+            if maths_client:
+                db = maths_client[self.config.MATHS_TRAINING_DB]
+                collection = db[self.config.MATHS_TRAIN_COLLECTION]
+                math_count = collection.count_documents({})
+                total += math_count
+                print(f"   🔢 Math Training: {math_count} documents")
+                self._close_maths_mongo_connection(maths_client)
+        except Exception as e:
+            print(f"   ⚠️ Error counting Math Training: {e}")
+        
+        print(f"📊 Total estimated data: {total:,} examples")
+        return total
     
     def set_tokenizer(self, tokenizer):
         """Set tokenizer for proper token counting and semantic search"""
@@ -125,45 +169,45 @@ class DataLoader:
             except Exception as e:
                 print(f"⚠️ Error closing Math Training MongoDB connection: {e}")
     
-    def _semantic_similarity(self, query: str, document: Dict) -> float:
-        """Calculate semantic similarity between query and document"""
-        if not self._tokenizer:
-            return self._keyword_similarity(query, document)
-        
+    def _safe_math_data_processing(self, math_example):
+        """Safely process math data with type handling"""
         try:
-            query_tokens = set(self._tokenizer.encode(query))
-            doc_text = f"{document.get('input', '')} {document.get('output', '')} {document.get('thinking', '')}"
-            doc_tokens = set(self._tokenizer.encode(doc_text))
+            # Safely extract and convert fields
+            input_raw = math_example.get('input', '')
+            output_raw = math_example.get('output', '') 
+            thinking_raw = math_example.get('thinking', '')
             
-            if not query_tokens or not doc_tokens:
-                return 0.0
+            # Convert to string safely
+            input_text = str(input_raw) if input_raw is not None else ""
+            output_text = str(output_raw) if output_raw is not None else ""
+            thinking_text = str(thinking_raw) if thinking_raw is not None else "Solving the mathematical problem step by step"
             
-            intersection = len(query_tokens.intersection(doc_tokens))
-            union = len(query_tokens.union(doc_tokens))
+            # Clean and validate
+            input_text = input_text.strip()
+            output_text = output_text.strip()
+            thinking_text = thinking_text.strip()
             
-            if union == 0:
-                return 0.0
-            
-            length_penalty = min(1.0, 100 / len(doc_tokens))
-            return (intersection / union) * length_penalty
-            
+            # Validate content
+            if (len(input_text) > 2 and len(output_text) > 1 and
+                any(math_keyword in input_text.lower() for math_keyword in 
+                    ['calculate', 'solve', 'math', 'equation', '=', '+', '-', '*', '/', 'x', 'y'])):
+                
+                return {
+                    "input": input_text,
+                    "thinking": thinking_text,
+                    "output": output_text,
+                    "mood": random.choice(["analytical", "precise", "logical", "educational"]),
+                    "context_used": [],
+                    "source": "math_training"
+                }
+        
         except Exception as e:
-            print(f"⚠️ Semantic similarity error: {e}")
-            return self._keyword_similarity(query, document)
-    
-    def _keyword_similarity(self, query: str, document: Dict) -> float:
-        """Fallback keyword-based similarity"""
-        query_words = set(query.lower().split())
-        doc_text = f"{document.get('input', '')} {document.get('output', '')}".lower()
-        doc_words = set(doc_text.split())
+            print(f"⚠️ Error processing math example: {e}")
+            if 'input' in math_example:
+                print(f"   Problem input: {math_example['input']}")
         
-        if not query_words:
-            return 0.0
-        
-        common_words = query_words.intersection(doc_words)
-        return len(common_words) / len(query_words)
-    
-    # In data_loader.py - Fix the buffer filling methods
+        return None
+
     def _fill_buffers(self, target_size: int = 500):
         """Fill all three buffers for mixed streaming - FIXED VERSION"""
         # Fill lang_model buffer
@@ -227,50 +271,6 @@ class DataLoader:
 
         return len(self._lang_model_buffer) > 0 or len(self._mongo_buffer) > 0 or len(self._maths_buffer) > 0
     
-    def get_total_data_size_estimate(self) -> int:
-        """Get estimated total data size from all sources"""
-        print("🔍 Estimating total data size...")
-        total = 0
-        
-        # Count lang_model lines
-        try:
-            if os.path.exists(self.config.LANG_MODEL_PATH):
-                with open(self.config.LANG_MODEL_PATH, 'r', encoding='utf-8') as f:
-                    lang_count = sum(1 for line in f if line.strip())
-                total += lang_count
-                print(f"   📄 lang_model.txt: {lang_count} lines")
-        except Exception as e:
-            print(f"   ⚠️ Error counting lang_model: {e}")
-        
-        # Count MongoDB documents
-        try:
-            client = self._get_mongo_connection()
-            if client:
-                db = client[self.config.DATABASE_NAME]
-                collection = db[self.config.COLLECTION_NAME]
-                mongo_count = collection.count_documents({})
-                total += mongo_count
-                print(f"   🗄️ Main MongoDB: {mongo_count} documents")
-                self._close_mongo_connection(client)
-        except Exception as e:
-            print(f"   ⚠️ Error counting MongoDB: {e}")
-        
-        # Count Math Training documents
-        try:
-            maths_client = self._get_maths_mongo_connection()
-            if maths_client:
-                db = maths_client[self.config.MATHS_TRAINING_DB]
-                collection = db[self.config.MATHS_TRAIN_COLLECTION]
-                math_count = collection.count_documents({})
-                total += math_count
-                print(f"   🔢 Math Training: {math_count} documents")
-                self._close_maths_mongo_connection(maths_client)
-        except Exception as e:
-            print(f"   ⚠️ Error counting Math Training: {e}")
-        
-        print(f"📊 Total estimated data: {total:,} examples")
-        return total
-
     def load_lang_model_data(self, max_lines: int = None) -> Iterator[str]:
         """Load raw text data for language modeling"""
         if not os.path.exists(self.config.LANG_MODEL_PATH):
@@ -555,6 +555,44 @@ class DataLoader:
         
         return top_contexts
     
+    def _semantic_similarity(self, query: str, document: Dict) -> float:
+        """Calculate semantic similarity between query and document"""
+        if not self._tokenizer:
+            return self._keyword_similarity(query, document)
+        
+        try:
+            query_tokens = set(self._tokenizer.encode(query))
+            doc_text = f"{document.get('input', '')} {document.get('output', '')} {document.get('thinking', '')}"
+            doc_tokens = set(self._tokenizer.encode(doc_text))
+            
+            if not query_tokens or not doc_tokens:
+                return 0.0
+            
+            intersection = len(query_tokens.intersection(doc_tokens))
+            union = len(query_tokens.union(doc_tokens))
+            
+            if union == 0:
+                return 0.0
+            
+            length_penalty = min(1.0, 100 / len(doc_tokens))
+            return (intersection / union) * length_penalty
+            
+        except Exception as e:
+            print(f"⚠️ Semantic similarity error: {e}")
+            return self._keyword_similarity(query, document)
+    
+    def _keyword_similarity(self, query: str, document: Dict) -> float:
+        """Fallback keyword-based similarity"""
+        query_words = set(query.lower().split())
+        doc_text = f"{document.get('input', '')} {document.get('output', '')}".lower()
+        doc_words = set(doc_text.split())
+        
+        if not query_words:
+            return 0.0
+        
+        common_words = query_words.intersection(doc_words)
+        return len(common_words) / len(query_words)
+    
     def _search_lang_model_context(self, query: str, max_contexts: int) -> List[Dict]:
         """Search for relevant context in lang_model data"""
         if not self._tokenizer:
@@ -690,45 +728,6 @@ class DataLoader:
             self._maths_mongo_client = None
             print("🔒 Persistent Math Training MongoDB connection closed")
     
-    def _safe_math_data_processing(self, math_example):
-        """Safely process math data with type handling"""
-        try:
-            # Safely extract and convert fields
-            input_raw = math_example.get('input', '')
-            output_raw = math_example.get('output', '') 
-            thinking_raw = math_example.get('thinking', '')
-            
-            # Convert to string safely
-            input_text = str(input_raw) if input_raw is not None else ""
-            output_text = str(output_raw) if output_raw is not None else ""
-            thinking_text = str(thinking_raw) if thinking_raw is not None else "Solving the mathematical problem step by step"
-            
-            # Clean and validate
-            input_text = input_text.strip()
-            output_text = output_text.strip()
-            thinking_text = thinking_text.strip()
-            
-            # Validate content
-            if (len(input_text) > 2 and len(output_text) > 1 and
-                any(math_keyword in input_text.lower() for math_keyword in 
-                    ['calculate', 'solve', 'math', 'equation', '=', '+', '-', '*', '/', 'x', 'y'])):
-                
-                return {
-                    "input": input_text,
-                    "thinking": thinking_text,
-                    "output": output_text,
-                    "mood": random.choice(["analytical", "precise", "logical", "educational"]),
-                    "context_used": [],
-                    "source": "math_training"
-                }
-        
-        except Exception as e:
-            print(f"⚠️ Error processing math example: {e}")
-            if 'input' in math_example:
-                print(f"   Problem input: {math_example['input']}")
-        
-        return None
-
     def __del__(self):
         """Destructor to ensure connections are closed"""
         self.close_persistent_connections()

@@ -141,7 +141,7 @@ class ElfOwlTrainer:
         }
     
     def prepare_training(self):
-        """Prepare everything for training - FIXED AUTO-SCALING"""
+        """Prepare everything for training - FIXED AUTO-SCALING WITH TOKENIZER"""
         print("🔄 Preparing training...")
         
         # Get total data size estimate FIRST
@@ -176,9 +176,14 @@ class ElfOwlTrainer:
         # Auto-scale with FULL data size information
         self.config.auto_scale(data_size, unique_token_count, total_estimated_data)
         
-        # Train tokenizer
+        # Train tokenizer FIRST - THIS IS CRITICAL
         print("🔄 Training tokenizer...")
         self.tokenizer.train_tokenizer(self.data_loader)
+        
+        # SAVE TOKENIZER IMMEDIATELY so inference can use it
+        os.makedirs(os.path.dirname(self.config.TOKENIZER_SAVE_PATH), exist_ok=True)
+        self.tokenizer.save(self.config.TOKENIZER_SAVE_PATH)
+        print(f"💾 Tokenizer saved to {self.config.TOKENIZER_SAVE_PATH}")
         
         # Set tokenizer for data_loader
         self.data_loader.set_tokenizer(self.tokenizer)
@@ -445,6 +450,7 @@ class ElfOwlTrainer:
         
         # Save final model
         self.save_model()
+        # Tokenizer is already saved in prepare_training, but save again to be safe
         self.tokenizer.save(self.config.TOKENIZER_SAVE_PATH)
         
         # Cleanup
@@ -591,3 +597,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

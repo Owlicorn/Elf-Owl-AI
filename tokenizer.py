@@ -37,16 +37,8 @@ class ElfOwlTokenizer:
             if pair.get('thinking'):
                 texts.append(pair['thinking'])
         
-        # **FIX: Handle None VOCAB_SIZE**
-        if self.config.VOCAB_SIZE is None:
-            # Calculate reasonable vocab size from data
-            unique_words = set()
-            for text in texts:
-                unique_words.update(text.split())
-            vocab_size = min(50000, len(unique_words) + len(self.special_tokens))
-            print(f"⚠️ VOCAB_SIZE was None, using calculated size: {vocab_size}")
-        else:
-            vocab_size = self.config.VOCAB_SIZE
+        # Use config VOCAB_SIZE
+        vocab_size = self.config.VOCAB_SIZE
         
         print(f"📝 Using vocabulary size: {vocab_size}")
         
@@ -76,11 +68,15 @@ class ElfOwlTokenizer:
     
     def get_special_tokens(self) -> Dict[str, int]:
         """Get special token mappings"""
+        if not self.tokenizer:
+            return {}
         return {token: self.tokenizer.token_to_id(token) for token in self.special_tokens}
     
     def save(self, path: str):
-        """Save tokenizer"""
+        """Save tokenizer - FIXED DIRECTORY CREATION"""
         if self.tokenizer:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             self.tokenizer.save(path)
             print(f"💾 Tokenizer saved to {path}")
     
@@ -92,3 +88,4 @@ class ElfOwlTokenizer:
             print(f"📂 Tokenizer loaded from {path}")
         else:
             print(f"❌ Tokenizer file not found at {path}")
+            

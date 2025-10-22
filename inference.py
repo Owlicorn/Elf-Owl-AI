@@ -30,10 +30,21 @@ class ElfOwlInference:
         self.data_loader = DataLoader(persistent_mongo=persistent_mongo)
         self.tokenizer = ElfOwlTokenizer()
         
-        # Load tokenizer
+        # Load tokenizer - DON'T TRAIN, JUST LOAD OR FAIL GRACEFULLY
         if tokenizer_path is None:
             tokenizer_path = self.config.TOKENIZER_SAVE_PATH
-        self.tokenizer.load(tokenizer_path)
+        
+        if os.path.exists(tokenizer_path):
+            self.tokenizer.load(tokenizer_path)
+            print(f"✅ Tokenizer loaded from {tokenizer_path}")
+        else:
+            print(f"❌ Tokenizer not found at {tokenizer_path}")
+            print("💡 Please train the model first: python trainer.py")
+            # Set a flag to indicate tokenizer is not ready
+            self._tokenizer_ready = False
+            return
+        
+        self._tokenizer_ready = True
         
         # Set tokenizer for smart features
         self.data_loader.set_tokenizer(self.tokenizer)
@@ -45,6 +56,9 @@ class ElfOwlInference:
         self.model = self.load_model(model_path)
         if self.model:
             self.model.eval()
+            print("✅ Model loaded successfully!")
+        else:
+            print("❌ Model not loaded - please train first")
         
         # Response cache for similar queries
         self.response_cache = {}
@@ -65,7 +79,16 @@ class ElfOwlInference:
             "capital of usa": "Washington D.C. is the capital of the United States.",
             "population of china": "China's population is approximately 1.425 billion people as of 2024.",
             "current pm of uk": "Rishi Sunak is the current Prime Minister of the United Kingdom.",
-            "current pm of canada": "Justin Trudeau is the current Prime Minister of Canada."
+            "current pm of canada": "Justin Trudeau is the current Prime Minister of Canada.",
+            "solve 2+2": "2 + 2 = 4",
+            "calculate 5*5": "5 × 5 = 25",
+            "what is 10/2": "10 ÷ 2 = 5",
+            "square root of 16": "√16 = 4",
+            "pi value": "π ≈ 3.14159",
+            "who created you": "I was created by Puneet Kumar Mishra on 12-10-2025.",
+            "what is your name": "I am Elf Owl AI, a virtual owl AI created by Puneet Kumar Mishra.",
+            "hello": "Hello! I'm Elf Owl AI, how can I help you today? 🦉",
+            "how are you": "I'm doing great! Ready to help with any questions or calculations you have! 🦉"
         }
         
         print("🚀 Elf Owl AI Inference Engine Ready!")
@@ -76,18 +99,26 @@ class ElfOwlInference:
         print(f"🔗 Persistent MongoDB: {persistent_mongo}")
         print(f"🔢 Math Training Available: {self.config.MATHS_TRAINING_URL is not None}")
         print(f"📚 Fallback Knowledge: {len(self.fallback_knowledge)} entries")
+        print(f"✅ Tokenizer Ready: {self._tokenizer_ready}")
+        print(f"✅ Model Ready: {self.model is not None}")
     
     def load_model(self, model_path: str = None) -> Optional[ElfOwlModel]:
         """Load trained model"""
         if model_path is None:
             model_path = f"{self.config.MODEL_SAVE_PATH}.pt"
         
+        # Check if model exists
+        if not os.path.exists(model_path):
+            print(f"❌ Model file not found at {model_path}")
+            print("💡 Please train the model first using: python trainer.py")
+            return None
+        
         try:
             checkpoint = torch.load(model_path, map_location=self.device)
             
             # Use saved config or current config
             saved_config = checkpoint.get('config_dict', {})
-            vocab_size = checkpoint.get('vocab_size', self.tokenizer.vocab_size)
+            vocab_size = checkpoint.get('vocab_size', self.tokenizer.vocab_size if self._tokenizer_ready else 50000)
             
             # Update config with saved values if available
             if saved_config:
@@ -112,9 +143,12 @@ class ElfOwlInference:
         except Exception as e:
             print(f"❌ Error loading model: {e}")
             return None
-    
+
     def _clean_user_query(self, query: str) -> str:
         """Clean and normalize user query"""
+        if not query:
+            return ""
+        
         # Remove extra spaces and normalize
         query = ' '.join(query.split())
         
@@ -418,12 +452,19 @@ class ElfOwlInference:
                          use_cache: bool = True, 
                          forced_mood: str = None) -> Dict[str, Any]:
         """Generate response with comprehensive fallback system"""
+        # Check if components are ready
+        if not self._tokenizer_ready:
+            return self._generate_safe_response(prompt, "neutral")
+        
         if not self.model:
             return self._generate_safe_response(prompt, "neutral")
         
         # Clean the prompt first
         original_prompt = prompt
         prompt = self._clean_user_query(original_prompt)
+        
+        if not prompt:
+            return self._generate_safe_response("empty query", "neutral")
         
         # Use config defaults if not provided
         if max_length is None:
@@ -601,7 +642,7 @@ class ElfOwlInference:
         prompt_lower = prompt.lower()
         
         mood_rules = [
-            (['calculate', 'solve', 'math', 'equation', 'formula'], "analytical"),
+            (['calculate', 'solve', 'math', 'equation', 'formula', 'derivative', 'integral'], "analytical"),
             (['joke', 'funny', 'laugh', 'haha', 'lol'], "playful"),
             (['sad', 'depressed', 'unhappy', 'cry', 'hurt'], "empathetic"),
             (['angry', 'mad', 'hate', 'annoyed'], "calm"),
@@ -611,25 +652,30 @@ class ElfOwlInference:
             (['help', 'problem', 'issue', 'trouble'], "helpful"),
             (['?', 'who', 'when', 'where'], "curious"),
             (['thank', 'thanks'], "grateful"),
+            (['hello', 'hi', 'hey'], "friendly"),
+            (['serious', 'important', 'critical'], "serious"),
+            (['science', 'physics', 'chemistry', 'biology'], "scientific"),
         ]
         
         for keywords, mood in mood_rules:
             if any(keyword in prompt_lower for keyword in keywords):
                 return mood
         
-        return random.choice(["friendly", "curious", "helpful"])
+        return random.choice(["friendly", "curious", "helpful", "analytical"])
     
     def _clean_response(self, response: str) -> str:
         """Clean and format response"""
         if not response:
             return ""
         
+        # Remove special tokens
         for token in self.special_tokens:
             response = response.replace(token, '')
         
         response = re.sub(r'\[SEP\]', '', response)
         response = re.sub(r'\s+', ' ', response).strip()
         
+        # Capitalize first letter
         if response:
             response = response[0].upper() + response[1:]
         
@@ -669,6 +715,7 @@ class ElfOwlInference:
             "smart_context_enabled": self.use_smart_context,
             "web_search_enabled": self.enable_web_search,
             "model_loaded": self.model is not None,
+            "tokenizer_ready": self._tokenizer_ready,
             "device": str(self.device),
             "default_mood": self._default_mood,
             "math_training_available": self.config.MATHS_TRAINING_URL is not None,
@@ -692,3 +739,4 @@ class ElfOwlInference:
     def __del__(self):
         """Destructor"""
         self.cleanup()
+        
