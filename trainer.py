@@ -141,30 +141,23 @@ class ElfOwlTrainer:
         }
     
     def prepare_training(self):
-        """Prepare everything for training - IMPROVED VERSION"""
+        """Prepare everything for training - FIXED AUTO-SCALING"""
         print("🔄 Preparing training...")
         
-        # First, validate data sources
-        self.validate_data_sources()
+        # Get total data size estimate FIRST
+        total_estimated_data = self.data_loader.get_total_data_size_estimate()
         
-        # Load data for analysis with better error handling
+        # Load data for analysis - use larger sample for better scaling
         print("📚 Loading training data for analysis...")
-        try:
-            training_pairs = self.data_loader.get_training_pairs(max_examples=10000)  # Limit for analysis
-            data_size = len(training_pairs)
+        training_pairs = self.data_loader.get_training_pairs(max_examples=30000)  # Increased from 10K
+        data_size = len(training_pairs)
+        
+        if data_size == 0:
+            print("❌ No training data found! Check your data sources.")
+            return {"error": "No training data"}
             
-            if data_size == 0:
-                print("❌ No training data found! Check your data sources.")
-                return {"error": "No training data"}
-                
-            print(f"📊 Successfully loaded {data_size} examples for analysis")
-            
-        except Exception as e:
-            print(f"❌ Error loading training data: {e}")
-            # Try to continue with minimal data
-            training_pairs = []
-            data_size = 0
-
+        print(f"📊 Successfully loaded {data_size:,} examples for analysis")
+        
         # Calculate unique tokens
         unique_words = set()
         for pair in training_pairs:
@@ -178,16 +171,10 @@ class ElfOwlTrainer:
                 continue
         
         unique_token_count = len(unique_words)
-        print(f"📊 Data analysis: {data_size} examples, {unique_token_count} unique words")
+        print(f"📊 Data analysis: {data_size:,} examples, {unique_token_count:,} unique words")
         
-        # Auto-scale with minimum guarantees
-        self.config.auto_scale(data_size, unique_token_count)
-        
-        # Ensure minimum model size for your data
-        if data_size > 50000:
-            self.config.D_MODEL = max(self.config.D_MODEL, 512)
-            self.config.N_LAYERS = max(self.config.N_LAYERS, 8)
-            print(f"🔧 Boosted model size for large dataset: d_model={self.config.D_MODEL}")
+        # Auto-scale with FULL data size information
+        self.config.auto_scale(data_size, unique_token_count, total_estimated_data)
         
         # Train tokenizer
         print("🔄 Training tokenizer...")
@@ -246,29 +233,13 @@ class ElfOwlTrainer:
         
         return {
             "data_size": data_size,
+            "total_estimated_data": total_estimated_data,
             "unique_tokens": unique_token_count,
             "training_examples": len(training_pairs),
             "model_parameters": total_params,
             "estimated_size_mb": param_size
         }
 
-    def validate_data_sources(self):
-        """Validate all data sources before training"""
-        print("🔍 Validating data sources...")
-        
-        # Test MongoDB connections
-        try:
-            mongo_pairs = list(self.data_loader.load_mongodb_conversations(limit=10))
-            print(f"✅ Main MongoDB: {len(mongo_pairs)} sample documents")
-        except Exception as e:
-            print(f"❌ Main MongoDB failed: {e}")
-        
-        try:
-            math_pairs = list(self.data_loader.load_maths_training_data(limit=10))
-            print(f"✅ Math Training: {len(math_pairs)} sample documents")
-        except Exception as e:
-            print(f"❌ Math Training failed: {e}")
-    
     def create_dataloader(self):
         """Create appropriate dataloader based on streaming preference"""
         if self.use_streaming:
@@ -620,4 +591,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

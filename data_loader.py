@@ -227,6 +227,50 @@ class DataLoader:
 
         return len(self._lang_model_buffer) > 0 or len(self._mongo_buffer) > 0 or len(self._maths_buffer) > 0
     
+    def get_total_data_size_estimate(self) -> int:
+        """Get estimated total data size from all sources"""
+        print("🔍 Estimating total data size...")
+        total = 0
+        
+        # Count lang_model lines
+        try:
+            if os.path.exists(self.config.LANG_MODEL_PATH):
+                with open(self.config.LANG_MODEL_PATH, 'r', encoding='utf-8') as f:
+                    lang_count = sum(1 for line in f if line.strip())
+                total += lang_count
+                print(f"   📄 lang_model.txt: {lang_count} lines")
+        except Exception as e:
+            print(f"   ⚠️ Error counting lang_model: {e}")
+        
+        # Count MongoDB documents
+        try:
+            client = self._get_mongo_connection()
+            if client:
+                db = client[self.config.DATABASE_NAME]
+                collection = db[self.config.COLLECTION_NAME]
+                mongo_count = collection.count_documents({})
+                total += mongo_count
+                print(f"   🗄️ Main MongoDB: {mongo_count} documents")
+                self._close_mongo_connection(client)
+        except Exception as e:
+            print(f"   ⚠️ Error counting MongoDB: {e}")
+        
+        # Count Math Training documents
+        try:
+            maths_client = self._get_maths_mongo_connection()
+            if maths_client:
+                db = maths_client[self.config.MATHS_TRAINING_DB]
+                collection = db[self.config.MATHS_TRAIN_COLLECTION]
+                math_count = collection.count_documents({})
+                total += math_count
+                print(f"   🔢 Math Training: {math_count} documents")
+                self._close_maths_mongo_connection(maths_client)
+        except Exception as e:
+            print(f"   ⚠️ Error counting Math Training: {e}")
+        
+        print(f"📊 Total estimated data: {total:,} examples")
+        return total
+
     def load_lang_model_data(self, max_lines: int = None) -> Iterator[str]:
         """Load raw text data for language modeling"""
         if not os.path.exists(self.config.LANG_MODEL_PATH):
