@@ -38,8 +38,8 @@ class Config:
     TOP_P = 0.85
     TEMPERATURE = 0.7
     REPETITION_PENALTY = 1.5
-    MAX_MONGO_EXAMPLES = 100000
-    MAX_MATHS_EXAMPLES = 100000  
+    MAX_MONGO_EXAMPLES = 40000
+    MAX_MATHS_EXAMPLES = 30000
     
     # Training monitoring
     SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?", "Solve 2+2", "Calculate derivative of x^2"]

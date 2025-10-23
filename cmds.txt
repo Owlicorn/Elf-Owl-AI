@@ -1,0 +1,1 @@
+python maths_train.py --examples 4970 --output math_data.json
