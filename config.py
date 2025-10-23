@@ -38,8 +38,11 @@ class Config:
     TOP_P = 0.85
     TEMPERATURE = 0.7
     REPETITION_PENALTY = 1.5
+    
+    # Data loading limits - ENFORCE THESE STRICTLY
     MAX_MONGO_EXAMPLES = 40000
     MAX_MATHS_EXAMPLES = 30000
+    MAX_LANG_MODEL_LINES = 50000
     
     # Training monitoring
     SAMPLE_PROMPTS = ["Hello", "How are you?", "Who created you?", "What is mass of H?", "Solve 2+2", "Calculate derivative of x^2"]
@@ -156,4 +159,3 @@ class Config:
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:
         return {k: v for k, v in cls.__dict__.items() if not k.startswith('_') and not callable(v)}
-    

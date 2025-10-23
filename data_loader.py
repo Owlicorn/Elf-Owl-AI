@@ -27,53 +27,64 @@ class DataLoader:
         self._maths_buffer = deque()
         self._min_buffer_size = 100
         
+        # Track loaded counts to enforce limits
+        self._mongo_loaded_count = 0
+        self._maths_loaded_count = 0
+        self._lang_model_loaded_count = 0
+        
         # Initialize connections if persistent mode
         if persistent_mongo:
             self._get_mongo_connection()
             self._get_maths_mongo_connection()
 
     def get_total_data_size_estimate(self) -> int:
-        """Get estimated total data size from all sources"""
-        print("🔍 Estimating total data size...")
+        """Get estimated total data size from all sources WITH LIMITS APPLIED"""
+        print("🔍 Estimating total data size with limits...")
         total = 0
         
-        # Count lang_model lines
+        # Count lang_model lines WITH LIMIT
         try:
             if os.path.exists(self.config.LANG_MODEL_PATH):
                 with open(self.config.LANG_MODEL_PATH, 'r', encoding='utf-8') as f:
                     lang_count = sum(1 for line in f if line.strip())
+                # Apply limit
+                lang_count = min(lang_count, self.config.MAX_LANG_MODEL_LINES)
                 total += lang_count
-                print(f"   📄 lang_model.txt: {lang_count} lines")
+                print(f"   📄 lang_model.txt: {lang_count} lines (limit: {self.config.MAX_LANG_MODEL_LINES})")
         except Exception as e:
             print(f"   ⚠️ Error counting lang_model: {e}")
         
-        # Count MongoDB documents
+        # Count MongoDB documents WITH LIMIT
         try:
             client = self._get_mongo_connection()
             if client:
                 db = client[self.config.DATABASE_NAME]
                 collection = db[self.config.COLLECTION_NAME]
                 mongo_count = collection.count_documents({})
+                # Apply limit
+                mongo_count = min(mongo_count, self.config.MAX_MONGO_EXAMPLES)
                 total += mongo_count
-                print(f"   🗄️ Main MongoDB: {mongo_count} documents")
+                print(f"   🗄️ Main MongoDB: {mongo_count} documents (limit: {self.config.MAX_MONGO_EXAMPLES})")
                 self._close_mongo_connection(client)
         except Exception as e:
             print(f"   ⚠️ Error counting MongoDB: {e}")
         
-        # Count Math Training documents
+        # Count Math Training documents WITH LIMIT
         try:
             maths_client = self._get_maths_mongo_connection()
             if maths_client:
                 db = maths_client[self.config.MATHS_TRAINING_DB]
                 collection = db[self.config.MATHS_TRAIN_COLLECTION]
                 math_count = collection.count_documents({})
+                # Apply limit
+                math_count = min(math_count, self.config.MAX_MATHS_EXAMPLES)
                 total += math_count
-                print(f"   🔢 Math Training: {math_count} documents")
+                print(f"   🔢 Math Training: {math_count} documents (limit: {self.config.MAX_MATHS_EXAMPLES})")
                 self._close_maths_mongo_connection(maths_client)
         except Exception as e:
             print(f"   ⚠️ Error counting Math Training: {e}")
         
-        print(f"📊 Total estimated data: {total:,} examples")
+        print(f"📊 Total estimated data (with limits): {total:,} examples")
         return total
     
     def set_tokenizer(self, tokenizer):
@@ -209,75 +220,104 @@ class DataLoader:
         return None
 
     def _fill_buffers(self, target_size: int = 500):
-        """Fill all three buffers for mixed streaming - FIXED VERSION"""
-        # Fill lang_model buffer
-        if len(self._lang_model_buffer) < target_size:
+        """Fill all three buffers for mixed streaming WITH LIMIT ENFORCEMENT"""
+        # Fill lang_model buffer WITH LIMIT
+        if len(self._lang_model_buffer) < target_size and self._lang_model_loaded_count < self.config.MAX_LANG_MODEL_LINES:
             try:
                 if os.path.exists(self.config.LANG_MODEL_PATH):
-                    lang_stream = self.load_lang_model_data(max_lines=target_size)
-                    for text in lang_stream:
-                        if text and len(text.strip()) > 10:  # Validate text
-                            self._lang_model_buffer.append({
-                                "input": "Write a creative piece of text",
-                                "thinking": "I should generate creative text with good grammar and flow",
-                                "output": text.strip(),
-                                "mood": random.choice(["creative", "playful", "wise", "descriptive"]),
-                                "context_used": [],
-                                "source": "lang_model"
-                            })
+                    remaining_lines = self.config.MAX_LANG_MODEL_LINES - self._lang_model_loaded_count
+                    lines_to_load = min(target_size, remaining_lines)
+                    
+                    if lines_to_load > 0:
+                        lang_stream = self.load_lang_model_data(max_lines=lines_to_load)
+                        for text in lang_stream:
+                            if text and len(text.strip()) > 10:  # Validate text
+                                self._lang_model_buffer.append({
+                                    "input": "Write a creative piece of text",
+                                    "thinking": "I should generate creative text with good grammar and flow",
+                                    "output": text.strip(),
+                                    "mood": random.choice(["creative", "playful", "wise", "descriptive"]),
+                                    "context_used": [],
+                                    "source": "lang_model"
+                                })
+                                self._lang_model_loaded_count += 1
+                                
+                                if self._lang_model_loaded_count >= self.config.MAX_LANG_MODEL_LINES:
+                                    print(f"📝 Reached lang_model limit: {self.config.MAX_LANG_MODEL_LINES}")
+                                    break
                 else:
                     print(f"⚠️ Lang model file not found: {self.config.LANG_MODEL_PATH}")
             except Exception as e:
                 print(f"⚠️ Error filling lang_model buffer: {e}")
 
-        # Fill MongoDB buffer
-        if len(self._mongo_buffer) < target_size:
+        # Fill MongoDB buffer WITH LIMIT
+        if len(self._mongo_buffer) < target_size and self._mongo_loaded_count < self.config.MAX_MONGO_EXAMPLES:
             try:
-                mongo_stream = self.load_mongodb_conversations(limit=target_size)
-                for conv in mongo_stream:
-                    input_text = conv.get('input') or conv.get('user_input') or conv.get('question', '')
-                    output_text = conv.get('output') or conv.get('assistant_response') or conv.get('answer', '')
-                    
-                    # PROPER TYPE VALIDATION AND CONVERSION
-                    input_text = str(input_text).strip() if input_text is not None else ""
-                    output_text = str(output_text).strip() if output_text is not None else ""
-                    thinking_text = str(conv.get('thinking', '')).strip() if conv.get('thinking') is not None else "Analyzing the user query and formulating a helpful response"
-
-                    if (input_text and output_text and 
-                        len(input_text) > 2 and len(output_text) > 2 and
-                        len(input_text) < 1000 and len(output_text) < 1000):  # Reasonable length checks
+                remaining_mongo = self.config.MAX_MONGO_EXAMPLES - self._mongo_loaded_count
+                mongo_to_load = min(target_size, remaining_mongo)
+                
+                if mongo_to_load > 0:
+                    mongo_stream = self.load_mongodb_conversations(limit=mongo_to_load)
+                    for conv in mongo_stream:
+                        input_text = conv.get('input') or conv.get('user_input') or conv.get('question', '')
+                        output_text = conv.get('output') or conv.get('assistant_response') or conv.get('answer', '')
                         
-                        self._mongo_buffer.append({
-                            "input": input_text,
-                            "thinking": thinking_text,
-                            "output": output_text,
-                            "mood": conv.get('mood', random.choice(self.config.MOODS)),
-                            "context_used": conv.get('context_used', []),
-                            "source": "mongodb"
-                        })
+                        # PROPER TYPE VALIDATION AND CONVERSION
+                        input_text = str(input_text).strip() if input_text is not None else ""
+                        output_text = str(output_text).strip() if output_text is not None else ""
+                        thinking_text = str(conv.get('thinking', '')).strip() if conv.get('thinking') is not None else "Analyzing the user query and formulating a helpful response"
+
+                        if (input_text and output_text and 
+                            len(input_text) > 2 and len(output_text) > 2 and
+                            len(input_text) < 1000 and len(output_text) < 1000):  # Reasonable length checks
+                            
+                            self._mongo_buffer.append({
+                                "input": input_text,
+                                "thinking": thinking_text,
+                                "output": output_text,
+                                "mood": conv.get('mood', random.choice(self.config.MOODS)),
+                                "context_used": conv.get('context_used', []),
+                                "source": "mongodb"
+                            })
+                            self._mongo_loaded_count += 1
+                            
+                            if self._mongo_loaded_count >= self.config.MAX_MONGO_EXAMPLES:
+                                print(f"🗄️ Reached MongoDB limit: {self.config.MAX_MONGO_EXAMPLES}")
+                                break
             except Exception as e:
                 print(f"⚠️ Error filling MongoDB buffer: {e}")
 
-        # Fill Math Training buffer - FIXED TYPE ISSUES
-        if len(self._maths_buffer) < target_size:
+        # Fill Math Training buffer WITH LIMIT
+        if len(self._maths_buffer) < target_size and self._maths_loaded_count < self.config.MAX_MATHS_EXAMPLES:
             try:
-                maths_stream = self.load_maths_training_data(limit=target_size)
-                for math_example in maths_stream:
-                    processed = self._safe_math_data_processing(math_example)
-                    if processed:
-                        self._maths_buffer.append(processed)
+                remaining_maths = self.config.MAX_MATHS_EXAMPLES - self._maths_loaded_count
+                maths_to_load = min(target_size, remaining_maths)
+                
+                if maths_to_load > 0:
+                    maths_stream = self.load_maths_training_data(limit=maths_to_load)
+                    for math_example in maths_stream:
+                        processed = self._safe_math_data_processing(math_example)
+                        if processed:
+                            self._maths_buffer.append(processed)
+                            self._maths_loaded_count += 1
+                            
+                            if self._maths_loaded_count >= self.config.MAX_MATHS_EXAMPLES:
+                                print(f"🔢 Reached Math Training limit: {self.config.MAX_MATHS_EXAMPLES}")
+                                break
             except Exception as e:
                 print(f"⚠️ Error filling Math Training buffer: {e}")
 
         return len(self._lang_model_buffer) > 0 or len(self._mongo_buffer) > 0 or len(self._maths_buffer) > 0
     
     def load_lang_model_data(self, max_lines: int = None) -> Iterator[str]:
-        """Load raw text data for language modeling"""
+        """Load raw text data for language modeling WITH LIMIT ENFORCEMENT"""
         if not os.path.exists(self.config.LANG_MODEL_PATH):
             print(f"❌ lang_model.txt not found at {self.config.LANG_MODEL_PATH}")
             return
         
         line_count = 0
+        max_allowed = min(max_lines, self.config.MAX_LANG_MODEL_LINES) if max_lines else self.config.MAX_LANG_MODEL_LINES
+        
         try:
             with open(self.config.LANG_MODEL_PATH, 'r', encoding='utf-8') as f:
                 for line in f:
@@ -285,13 +325,14 @@ class DataLoader:
                     if line:
                         yield line
                         line_count += 1
-                        if max_lines and line_count >= max_lines:
+                        if line_count >= max_allowed:
+                            print(f"📝 Loaded {line_count} lines from lang_model (limit: {self.config.MAX_LANG_MODEL_LINES})")
                             break
         except Exception as e:
             print(f"❌ Error reading lang_model.txt: {e}")
     
     def load_mongodb_conversations(self, limit: int = None) -> Iterator[Dict]:
-        """Load structured conversations from MongoDB"""
+        """Load structured conversations from MongoDB WITH LIMIT ENFORCEMENT"""
         client = self._get_mongo_connection()
         if not client:
             return
@@ -300,12 +341,17 @@ class DataLoader:
             db = client[self.config.DATABASE_NAME]
             collection = db[self.config.COLLECTION_NAME]
             
-            cursor = collection.find({})
-            if limit:
-                cursor = cursor.limit(limit)
+            # Apply both the requested limit and the config limit
+            effective_limit = min(limit, self.config.MAX_MONGO_EXAMPLES) if limit else self.config.MAX_MONGO_EXAMPLES
             
+            cursor = collection.find({}).limit(effective_limit)
+            
+            loaded_count = 0
             for doc in cursor:
                 yield doc
+                loaded_count += 1
+                
+            print(f"🗄️ Loaded {loaded_count} documents from MongoDB (limit: {self.config.MAX_MONGO_EXAMPLES})")
                 
         except Exception as e:
             print(f"❌ MongoDB streaming error: {e}")
@@ -313,7 +359,7 @@ class DataLoader:
             self._close_mongo_connection(client)
 
     def load_maths_training_data(self, limit: int = None) -> Iterator[Dict]:
-        """Load math training data from MongoDB"""
+        """Load math training data from MongoDB WITH LIMIT ENFORCEMENT"""
         client = self._get_maths_mongo_connection()
         if not client:
             return
@@ -322,12 +368,17 @@ class DataLoader:
             db = client[self.config.MATHS_TRAINING_DB]
             collection = db[self.config.MATHS_TRAIN_COLLECTION]
             
-            cursor = collection.find({})
-            if limit:
-                cursor = cursor.limit(limit)
+            # Apply both the requested limit and the config limit
+            effective_limit = min(limit, self.config.MAX_MATHS_EXAMPLES) if limit else self.config.MAX_MATHS_EXAMPLES
             
+            cursor = collection.find({}).limit(effective_limit)
+            
+            loaded_count = 0
             for doc in cursor:
                 yield doc
+                loaded_count += 1
+                
+            print(f"🔢 Loaded {loaded_count} documents from Math Training (limit: {self.config.MAX_MATHS_EXAMPLES})")
                 
         except Exception as e:
             print(f"❌ Math Training MongoDB streaming error: {e}")
@@ -335,15 +386,23 @@ class DataLoader:
             self._close_maths_mongo_connection(client)
     
     def get_training_pairs_streaming(self, batch_size: int = 1000) -> Iterator[List[Dict]]:
-        """Streaming generator that yields mixed batches from all sources"""
+        """Streaming generator that yields mixed batches from all sources WITH LIMITS"""
+        # Reset counters for new streaming session
+        self._mongo_loaded_count = 0
+        self._maths_loaded_count = 0
+        self._lang_model_loaded_count = 0
+        
+        print(f"🎯 Starting streaming with limits - MongoDB: {self.config.MAX_MONGO_EXAMPLES}, Math: {self.config.MAX_MATHS_EXAMPLES}, Lang: {self.config.MAX_LANG_MODEL_LINES}")
+        
         while True:
             # Refill buffers if needed
             if (len(self._lang_model_buffer) < self._min_buffer_size and 
                 len(self._mongo_buffer) < self._min_buffer_size and 
                 len(self._maths_buffer) < self._min_buffer_size):
                 if not self._fill_buffers(target_size=self._min_buffer_size * 2):
-                    # No more data available
+                    # No more data available or limits reached
                     if not self._lang_model_buffer and not self._mongo_buffer and not self._maths_buffer:
+                        print("📭 All data sources exhausted or limits reached")
                         return
 
             batch: List[Dict] = []
@@ -371,14 +430,14 @@ class DataLoader:
             yield batch
     
     def get_training_pairs(self, max_examples: int = None) -> List[Dict[str, Any]]:
-        """Convert all data to training format - non-streaming mode"""
-        print("📚 Loading training data (non-streaming mode)...")
+        """Convert all data to training format - non-streaming mode WITH LIMITS"""
+        print("📚 Loading training data with limits...")
         training_data: List[Dict[str, Any]] = []
 
-        # Load lang_model data
+        # Load lang_model data WITH LIMIT
         try:
-            lang_texts = list(self.load_lang_model_data(max_lines=None))
-            print(f"📄 Loaded {len(lang_texts)} lines from lang_model.txt")
+            lang_texts = list(self.load_lang_model_data(max_lines=self.config.MAX_LANG_MODEL_LINES))
+            print(f"📄 Loaded {len(lang_texts)} lines from lang_model.txt (limit: {self.config.MAX_LANG_MODEL_LINES})")
             for text in lang_texts:
                 training_data.append({
                     "input": "Write a creative piece of text",
@@ -391,10 +450,10 @@ class DataLoader:
         except Exception as e:
             print(f"⚠️ Error loading lang_model data: {e}")
 
-        # Load MongoDB conversations
+        # Load MongoDB conversations WITH LIMIT
         try:
-            mongo_conversations = list(self.load_mongodb_conversations(limit=None))
-            print(f"🗄️ Loaded {len(mongo_conversations)} conversations from MongoDB")
+            mongo_conversations = list(self.load_mongodb_conversations(limit=self.config.MAX_MONGO_EXAMPLES))
+            print(f"🗄️ Loaded {len(mongo_conversations)} conversations from MongoDB (limit: {self.config.MAX_MONGO_EXAMPLES})")
             for conv in mongo_conversations:
                 input_text = conv.get('input') or conv.get('user_input') or conv.get('question', '')
                 output_text = conv.get('output') or conv.get('assistant_response') or conv.get('answer', '')
@@ -411,10 +470,10 @@ class DataLoader:
         except Exception as e:
             print(f"⚠️ Error loading MongoDB data: {e}")
 
-        # Load Math Training data
+        # Load Math Training data WITH LIMIT
         try:
-            maths_data = list(self.load_maths_training_data(limit=None))
-            print(f"🔢 Loaded {len(maths_data)} examples from Math Training DB")
+            maths_data = list(self.load_maths_training_data(limit=self.config.MAX_MATHS_EXAMPLES))
+            print(f"🔢 Loaded {len(maths_data)} examples from Math Training DB (limit: {self.config.MAX_MATHS_EXAMPLES})")
             valid_math_count = 0
             for math_example in maths_data:
                 processed = self._safe_math_data_processing(math_example)
@@ -429,9 +488,10 @@ class DataLoader:
         if training_data:
             random.shuffle(training_data)
 
-        # Trim to max_examples if specified
+        # Trim to max_examples if specified (this is additional to source limits)
         if max_examples and len(training_data) > max_examples:
             training_data = training_data[:max_examples]
+            print(f"✂️ Further limited to {max_examples} total examples")
 
         print(f"📚 Total training pairs: {len(training_data)}")
 
