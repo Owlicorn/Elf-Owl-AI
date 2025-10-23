@@ -62,6 +62,14 @@ Public hosting options will be available soon.
 
 ---
 
+## 😁 Chats
+
+> ![Chat 0](Chats/image_0.png)
+
+> ![Chat 1](Chats/image_1.png)
+
+---
+
 ## 🧠 Local Deployment (Developer Setup)
 ```
 # 1. Clone repository
@@ -74,9 +82,9 @@ cd Elf-Owl-AI
 pip install -r requirements.txt
 
 # 4. Run locally
-python elf_owl_ai.py
+python app.py
 ```
-Then access it via http://localhost:5000/ or through your local interface.
+Then access it via http://localhost:8080/ or through your local interface.
 
 ---
 
