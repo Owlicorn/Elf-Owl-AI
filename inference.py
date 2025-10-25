@@ -190,8 +190,8 @@ class ElfOwlInference:
         
         # Gibberish indicators
         gibberish_indicators = [
-            "ouuuuu", "oooooh", "🦉", "💖", "✨", "his", "circuits", "digital",
-            "vast", "fledgling", "owlet", "hoot", "wisdom", "tweet", "chirp"
+            # "ouuuuu", "oooooh", "🦉", "💖", "✨", "his", "circuits", "digital",
+            # "vast", "fledgling", "owlet", "hoot", "wisdom", "tweet", "chirp"
         ]
         
         # Count gibberish indicators
